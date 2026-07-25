@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  font-family: "Vazirmatn Variable", "Vazirmatn", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --df-brand-950: #203848;
+  --df-brand-900: #25374b;
+  --df-brand-800: #293647;
+  --df-accent-500: #f88b24;
+  --df-success-600: #16865c;
+  --df-danger-600: #c93838;
+  --df-warning-400: #ffd600;
+  --df-canvas: #f1f4f6;
+  --df-surface: #f9f9f9;
+  --df-surface-raised: #ffffff;
+  --df-text: #111111;
+  --df-text-muted: #828282;
+  --df-border: #b5b4b4;
+  --df-border-soft: #e7e8ea;
+  --df-focus: #4f8fb5;
+  --df-radius-sm: 7px;
+  --df-radius-md: 10px;
+  --df-radius-lg: 20px;
+  --df-shadow-card: 0 4px 4px rgb(0 0 0 / 25%);
+  --df-shadow-raised: 0 14px 35px rgb(32 56 72 / 12%);
+}
+
+@theme inline {
+  --font-sans: "Vazirmatn Variable", "Vazirmatn", system-ui, sans-serif;
+  --color-brand-950: var(--df-brand-950);
+  --color-brand-900: var(--df-brand-900);
+  --color-brand-800: var(--df-brand-800);
+  --color-accent-500: var(--df-accent-500);
+  --color-success-600: var(--df-success-600);
+  --color-danger-600: var(--df-danger-600);
+  --color-warning-400: var(--df-warning-400);
+  --color-canvas: var(--df-canvas);
+  --color-surface: var(--df-surface);
+  --color-surface-raised: var(--df-surface-raised);
+  --color-ink: var(--df-text);
+  --color-muted: var(--df-text-muted);
+  --color-border: var(--df-border);
+  --color-border-soft: var(--df-border-soft);
+  --color-focus: var(--df-focus);
+  --radius-df-sm: var(--df-radius-sm);
+  --radius-df-md: var(--df-radius-md);
+  --radius-df-lg: var(--df-radius-lg);
+  --shadow-card: var(--df-shadow-card);
+  --shadow-raised: var(--df-shadow-raised);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--df-canvas);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 4%, rgb(248 139 36 / 8%), transparent 24rem),
+    var(--df-canvas);
+  color: var(--df-text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--df-focus) 45%, transparent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(248 139 36 / 24%);
+}
