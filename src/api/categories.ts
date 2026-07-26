@@ -1,10 +1,5 @@
-const DEFAULT_API_BASE_URL = 'https://digifan-api.onrender.com'
-
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const defaultApiBaseUrl = import.meta.env.DEV ? '' : DEFAULT_API_BASE_URL
-const apiBaseUrl = (
-  configuredApiBaseUrl?.length ? configuredApiBaseUrl : defaultApiBaseUrl
-).replace(/\/+$/, '')
+const apiBaseUrl = (configuredApiBaseUrl?.length ? configuredApiBaseUrl : '').replace(/\/+$/, '')
 
 export interface Category {
   id: string
