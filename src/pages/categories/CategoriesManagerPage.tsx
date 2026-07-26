@@ -46,17 +46,17 @@ function getActionError(error: unknown) {
 
 export function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [parentFilter, setParentFilter] = useState(ALL_PARENT_FILTER)
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null)
   const [form, setForm] = useState<CategoryForm>(EMPTY_FORM)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
 
-  const selectedCategory = useMemo(
-    () => categories.find((category) => category.id === selectedCategoryId),
-    [categories, selectedCategoryId],
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
   )
 
   const filteredCategories = useMemo(() => {
@@ -69,15 +69,6 @@ export function CategoriesPage() {
     )
   }, [categories, parentFilter])
 
-  const categoryOptions = useMemo(
-    () =>
-      filteredCategories.map((category) => ({
-        value: category.id,
-        label: getCategoryLabel(category),
-      })),
-    [filteredCategories],
-  )
-
   const parentFilterOptions = useMemo(
     () => {
       const usedParentIds = new Set(
@@ -88,7 +79,7 @@ export function CategoriesPage() {
 
       return [
         { value: ALL_PARENT_FILTER, label: 'همه دسته‌بندی‌ها' },
-        { value: NO_PARENT_FILTER, label: 'بدون دسته‌بندی مادر' },
+        { value: NO_PARENT_FILTER, label: 'بدون دسته‌بندی بالاسری' },
         ...categories
           .filter((category) => usedParentIds.has(category.id))
           .map((category) => ({ value: category.id, label: getCategoryLabel(category) })),
@@ -99,7 +90,7 @@ export function CategoriesPage() {
 
   const parentOptions = useMemo(
     () => [
-      { value: '', label: 'بدون دسته‌بندی مادر' },
+      { value: '', label: 'بدون دسته‌بندی بالاسری' },
       ...categories
         .filter((category) => category.id !== editingCategoryId)
         .map((category) => ({
@@ -118,9 +109,6 @@ export function CategoriesPage() {
         if (!isActive) return
 
         setCategories(nextCategories)
-        setSelectedCategoryId((currentId) =>
-          nextCategories.some((category) => category.id === currentId) ? currentId : '',
-        )
       })
       .catch((error: unknown) => {
         if (!isActive) return
@@ -149,9 +137,6 @@ export function CategoriesPage() {
     try {
       const nextCategories = await getCategories()
       setCategories(nextCategories)
-      setSelectedCategoryId((currentId) =>
-        nextCategories.some((category) => category.id === currentId) ? currentId : '',
-      )
       setFeedback({ variant: 'success', title: 'فهرست دسته‌بندی‌ها به‌روز شد.' })
     } catch (error) {
       setFeedback({ variant: 'danger', title: getActionError(error) })
@@ -161,14 +146,12 @@ export function CategoriesPage() {
     }
   }
 
-  const handleEdit = () => {
-    if (!selectedCategory) return
-
-    setEditingCategoryId(selectedCategory.id)
+  const handleEdit = (category: Category) => {
+    setEditingCategoryId(category.id)
     setForm({
-      name: selectedCategory.name ?? '',
-      description: selectedCategory.description ?? '',
-      parentCategoryId: selectedCategory.parentCategoryId ?? '',
+      name: category.name ?? '',
+      description: category.description ?? '',
+      parentCategoryId: category.parentCategoryId ?? '',
     })
     setFeedback(null)
   }
@@ -201,11 +184,11 @@ export function CategoriesPage() {
             category.id === editingCategoryId ? { id: category.id, ...input } : category,
           ),
         )
+        setParentFilter(input.parentCategoryId ?? NO_PARENT_FILTER)
         setFeedback({ variant: 'success', title: 'دسته‌بندی ویرایش شد.' })
       } else {
         const id = await createCategory(input)
         setCategories((currentCategories) => [...currentCategories, { id, ...input }])
-        setSelectedCategoryId(id)
         setParentFilter(input.parentCategoryId ?? NO_PARENT_FILTER)
         setFeedback({ variant: 'success', title: 'دسته‌بندی جدید اضافه شد.' })
       }
@@ -218,38 +201,33 @@ export function CategoriesPage() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!selectedCategory) return
-
-    const categoryLabel = getCategoryLabel(selectedCategory)
+  const handleDelete = async (category: Category) => {
+    const categoryLabel = getCategoryLabel(category)
     const confirmed = window.confirm(`دسته‌بندی «${categoryLabel}» حذف شود؟`)
 
     if (!confirmed) return
 
     setPendingAction('delete')
+    setPendingCategoryId(category.id)
     setFeedback(null)
 
     try {
-      await deleteCategory(selectedCategory.id)
+      await deleteCategory(category.id)
       setCategories((currentCategories) =>
-        currentCategories.filter((category) => category.id !== selectedCategory.id),
+        currentCategories.filter((currentCategory) => currentCategory.id !== category.id),
       )
-      setSelectedCategoryId('')
 
-      if (editingCategoryId === selectedCategory.id) resetEditor()
+      if (editingCategoryId === category.id) resetEditor()
 
       setFeedback({ variant: 'success', title: 'دسته‌بندی حذف شد.' })
     } catch (error) {
       setFeedback({ variant: 'danger', title: getActionError(error) })
     } finally {
       setPendingAction(null)
+      setPendingCategoryId(null)
     }
   }
 
-  const parentCategory = selectedCategory?.parentCategoryId
-    ? categories.find((category) => category.id === selectedCategory.parentCategoryId)
-    : undefined
-  const selectedDescription = selectedCategory?.description?.trim()
   const isBusy = pendingAction !== null
 
   return (
@@ -297,74 +275,71 @@ export function CategoriesPage() {
             </Button>
           </div>
 
-          <div className="grid gap-4">
-            <Dropdown
-              disabled={isLoading || categories.length === 0 || isBusy}
-              label="فیلتر بر اساس دسته‌بندی مادر"
-              options={parentFilterOptions}
-              value={parentFilter}
-              onChange={(value) => {
-                setParentFilter(value)
-                setSelectedCategoryId('')
-              }}
-            />
-            <Dropdown
-              disabled={isLoading || filteredCategories.length === 0 || isBusy}
-              label="دسته‌بندی"
-              options={categoryOptions}
-              placeholder={
-                isLoading
-                  ? 'در حال بارگذاری…'
-                  : filteredCategories.length === 0
-                    ? 'دسته‌بندی‌ای در این فیلتر نیست'
-                    : 'یک دسته‌بندی انتخاب کنید'
-              }
-              value={selectedCategoryId}
-              onChange={setSelectedCategoryId}
-            />
-          </div>
+          <Dropdown
+            disabled={isLoading || categories.length === 0 || isBusy}
+            label="فیلتر بر اساس دسته‌بندی بالاسری"
+            options={parentFilterOptions}
+            value={parentFilter}
+            onChange={setParentFilter}
+          />
 
-          {selectedCategory ? (
-            <div className="mt-4 rounded-df-md border border-border-soft bg-canvas/60 p-4">
-              <h3 className="m-0 text-base font-black text-brand-950">
-                {getCategoryLabel(selectedCategory)}
-              </h3>
-              <p className="mb-0 mt-2 min-h-6 text-sm leading-6 text-muted">
-                {selectedDescription?.length
-                  ? selectedDescription
-                  : 'توضیحی برای این دسته‌بندی ثبت نشده است.'}
-              </p>
-              <p className="mb-0 mt-3 text-xs text-muted">
-                دسته‌بندی مادر:{' '}
-                <span className="font-bold text-ink">
-                  {parentCategory ? getCategoryLabel(parentCategory) : 'ندارد'}
-                </span>
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button disabled={isBusy} size="sm" variant="outline" onClick={handleEdit}>
-                  ویرایش
-                </Button>
-                <Button
-                  disabled={isBusy}
-                  loading={pendingAction === 'delete'}
-                  size="sm"
-                  variant="danger"
-                  onClick={() => void handleDelete()}
-                >
-                  حذف
-                </Button>
-              </div>
-            </div>
-          ) : (
+          {isLoading || filteredCategories.length === 0 ? (
             <div className="mt-4 rounded-df-md border border-dashed border-border p-5 text-center text-sm text-muted">
               {isLoading
                 ? 'دسته‌بندی‌ها در حال دریافت هستند.'
                 : categories.length === 0
                   ? 'هنوز دسته‌بندی‌ای ثبت نشده است.'
-                  : filteredCategories.length === 0
-                    ? 'دسته‌بندی‌ای با این فیلتر پیدا نشد.'
-                  : 'برای مشاهده جزئیات، یک دسته‌بندی انتخاب کنید.'}
+                  : 'دسته‌بندی‌ای با این فیلتر پیدا نشد.'}
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {filteredCategories.map((category) => {
+                const parentCategory = category.parentCategoryId
+                  ? categoryById.get(category.parentCategoryId)
+                  : undefined
+                const description = category.description?.trim()
+
+                return (
+                  <article
+                    key={category.id}
+                    className="rounded-df-md border border-border-soft bg-canvas/60 p-4"
+                  >
+                    <h3 className="m-0 text-base font-black text-brand-950">
+                      {getCategoryLabel(category)}
+                    </h3>
+                    <p className="mb-0 mt-2 text-sm leading-6 text-muted">
+                      {description?.length
+                        ? description
+                        : 'توضیحی برای این دسته‌بندی ثبت نشده است.'}
+                    </p>
+                    <p className="mb-0 mt-3 text-xs text-muted">
+                      دسته‌بندی بالاسری:{' '}
+                      <span className="font-bold text-ink">
+                        {parentCategory ? getCategoryLabel(parentCategory) : 'ندارد'}
+                      </span>
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        disabled={isBusy}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEdit(category)}
+                      >
+                        ویرایش
+                      </Button>
+                      <Button
+                        disabled={isBusy}
+                        loading={pendingAction === 'delete' && pendingCategoryId === category.id}
+                        size="sm"
+                        variant="danger"
+                        onClick={() => void handleDelete(category)}
+                      >
+                        حذف
+                      </Button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           )}
         </Surface>
@@ -374,7 +349,7 @@ export function CategoriesPage() {
             {editingCategoryId ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی'}
           </h2>
           <p className="mb-5 mt-1 text-xs leading-6 text-muted">
-            نام الزامی است؛ توضیحات و دسته‌بندی مادر اختیاری هستند.
+            نام الزامی است؛ توضیحات و دسته‌بندی بالاسری اختیاری هستند.
           </p>
 
           <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
@@ -399,7 +374,7 @@ export function CategoriesPage() {
             />
             <Dropdown
               disabled={isBusy}
-              label="دسته‌بندی مادر"
+              label="دسته‌بندی بالاسری"
               options={parentOptions}
               value={form.parentCategoryId}
               onChange={(parentCategoryId) =>
