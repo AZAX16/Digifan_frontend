@@ -1,4 +1,6 @@
 import type {
+  ChangeEvent,
+  ChangeEventHandler,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
@@ -7,6 +9,8 @@ import type {
 import { useId } from 'react'
 
 import { cn } from '../../utils/cn'
+import { toPersianDigits } from '../../utils/persianDigits'
+import { Chevron } from './Chevron'
 
 interface FieldChromeProps {
   id?: string
@@ -29,7 +33,8 @@ function FieldChrome({
 }: FieldChromeProps) {
   const generatedId = useId()
   const controlId = id ?? generatedId
-  const descriptionId = hint || error ? `${controlId}-description` : undefined
+  const hasDescription = Boolean(error ?? hint)
+  const descriptionId = hasDescription ? `${controlId}-description` : undefined
 
   return (
     <div className={cn('grid gap-1.5', className)}>
@@ -40,7 +45,7 @@ function FieldChrome({
         </label>
       )}
       {children({ controlId, descriptionId })}
-      {(error || hint) && (
+      {(error ?? hint) && (
         <p
           id={descriptionId}
           className={cn('m-0 text-xs', error ? 'text-danger-600' : 'text-muted')}
@@ -53,7 +58,24 @@ function FieldChrome({
 }
 
 const controlClassName =
-  'min-h-11 w-full rounded-df-md border border-border-soft bg-white px-3 text-sm text-ink shadow-sm transition-colors placeholder:text-muted/75 hover:border-border focus:border-brand-950 focus:outline-none disabled:cursor-not-allowed disabled:bg-[#f0f1f2] disabled:opacity-60'
+  'min-h-11 w-full rounded-df-md border border-border-soft bg-white px-3 text-sm text-ink shadow-sm transition-colors placeholder:text-muted/75 hover:border-border focus:border-brand-950 focus:outline-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:bg-[#f0f1f2] disabled:opacity-60'
+const digitCompatibleInputTypes = new Set(['text', 'search', 'tel', 'password'])
+
+function handleDigitChange<T extends HTMLInputElement | HTMLTextAreaElement>(
+  event: ChangeEvent<T>,
+  onChange: ChangeEventHandler<T> | undefined,
+  normalizeDigits: boolean,
+) {
+  if (normalizeDigits) {
+    const normalizedValue = toPersianDigits(event.currentTarget.value)
+
+    if (normalizedValue !== event.currentTarget.value) {
+      event.currentTarget.value = normalizedValue
+    }
+  }
+
+  onChange?.(event)
+}
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
@@ -62,6 +84,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   leading?: ReactNode
   trailing?: ReactNode
   containerClassName?: string
+  normalizeDigits?: boolean
 }
 
 export function Input({
@@ -71,11 +94,16 @@ export function Input({
   error,
   leading,
   trailing,
+  type = 'text',
+  normalizeDigits = true,
+  onChange,
   required,
   className,
   containerClassName,
   ...props
 }: InputProps) {
+  const shouldNormalizeDigits = normalizeDigits && digitCompatibleInputTypes.has(type)
+
   return (
     <FieldChrome
       id={id}
@@ -94,6 +122,7 @@ export function Input({
           )}
           <input
             id={controlId}
+            type={type}
             required={required}
             aria-invalid={Boolean(error) || undefined}
             aria-describedby={descriptionId}
@@ -104,6 +133,7 @@ export function Input({
               error && 'border-danger-600 focus:border-danger-600',
               className,
             )}
+            onChange={(event) => handleDigitChange(event, onChange, shouldNormalizeDigits)}
             {...props}
           />
           {trailing && (
@@ -122,6 +152,7 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   hint?: string
   error?: string
   containerClassName?: string
+  normalizeDigits?: boolean
 }
 
 export function Textarea({
@@ -129,6 +160,8 @@ export function Textarea({
   label,
   hint,
   error,
+  normalizeDigits = true,
+  onChange,
   required,
   className,
   containerClassName,
@@ -155,6 +188,7 @@ export function Textarea({
             error && 'border-danger-600 focus:border-danger-600',
             className,
           )}
+          onChange={(event) => handleDigitChange(event, onChange, normalizeDigits)}
           {...props}
         />
       )}
@@ -190,21 +224,26 @@ export function Select({
       className={containerClassName}
     >
       {({ controlId, descriptionId }) => (
-        <select
-          id={controlId}
-          required={required}
-          aria-invalid={Boolean(error) || undefined}
-          aria-describedby={descriptionId}
-          className={cn(
-            controlClassName,
-            'cursor-pointer',
-            error && 'border-danger-600 focus:border-danger-600',
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </select>
+        <div className="relative">
+          <select
+            id={controlId}
+            required={required}
+            aria-invalid={Boolean(error) || undefined}
+            aria-describedby={descriptionId}
+            className={cn(
+              controlClassName,
+              'cursor-pointer appearance-none pl-10 focus-visible:outline-none focus-visible:ring-0',
+              error && 'border-danger-600 focus:border-danger-600',
+              className,
+            )}
+            {...props}
+          >
+            {children}
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-muted">
+            <Chevron />
+          </span>
+        </div>
       )}
     </FieldChrome>
   )

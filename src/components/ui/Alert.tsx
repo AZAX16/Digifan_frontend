@@ -7,6 +7,7 @@ export type AlertVariant = 'info' | 'success' | 'warning' | 'danger'
 export interface AlertProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   variant?: AlertVariant
   title: ReactNode
+  live?: boolean
 }
 
 const variants: Record<AlertVariant, string> = {
@@ -19,13 +20,14 @@ const variants: Record<AlertVariant, string> = {
 export function Alert({
   variant = 'info',
   title,
+  live = false,
   className,
   children,
   ...props
 }: AlertProps) {
   return (
     <div
-      role={variant === 'danger' ? 'alert' : 'status'}
+      role={live ? (variant === 'danger' ? 'alert' : 'status') : undefined}
       className={cn('rounded-df-md border p-4', variants[variant], className)}
       {...props}
     >

@@ -12,6 +12,8 @@ export interface ProductCardProps {
   price: string
   imageSrc?: string
   imageAlt?: string
+  imageLoading?: 'eager' | 'lazy'
+  imageFetchPriority?: 'high' | 'low' | 'auto'
   rating?: number
   isNew?: boolean
   className?: string
@@ -24,7 +26,9 @@ export function ProductCard({
   description,
   price,
   imageSrc,
-  imageAlt = '',
+  imageAlt,
+  imageLoading = 'lazy',
+  imageFetchPriority = 'auto',
   rating = 3,
   isNew = false,
   className,
@@ -47,7 +51,12 @@ export function ProductCard({
 
       <div className="absolute left-1/2 top-[51px] flex h-[136px] w-[179px] -translate-x-1/2 items-center justify-center overflow-hidden">
         <img
-          alt={imageAlt}
+          alt={imageSrc ? (imageAlt ?? name) : ''}
+          width={179}
+          height={136}
+          loading={imageLoading}
+          decoding="async"
+          fetchPriority={imageFetchPriority}
           className={cn(
             'block max-h-full max-w-full object-contain',
             !imageSrc && 'h-[90px] w-[90px]',

@@ -18,9 +18,9 @@ export function Chip({
       type={type}
       aria-pressed={selected}
       className={cn(
-        'inline-flex min-h-8 cursor-pointer items-center rounded-full border px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex min-h-8 cursor-pointer items-center rounded-full border px-3 text-xs font-medium shadow-sm transition-[background-color,border-color,color,opacity,transform] duration-200 ease-out hover:-translate-y-0.5 active:translate-y-[0.5px] disabled:cursor-not-allowed disabled:opacity-50',
         selected
-          ? 'border-brand-950 bg-brand-950 text-white'
+          ? 'border-brand-950 bg-brand-950 text-white hover:bg-[#31566e]'
           : 'border-border-soft bg-white text-brand-950 hover:border-brand-950',
         className,
       )}

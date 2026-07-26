@@ -22,14 +22,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    'bg-brand-950 text-white shadow-sm hover:bg-brand-900 active:translate-y-px',
+    'bg-brand-950 text-white shadow-[0_4px_10px_rgba(32,56,72,0.28)] hover:-translate-y-0.5 hover:bg-[#31566e] active:translate-y-[0.5px]',
   secondary:
-    'bg-accent-500 text-white shadow-sm hover:bg-[#e97812] active:translate-y-px',
+    'bg-accent-500 text-white shadow-[0_4px_10px_rgba(255,132,26,0.28)] hover:-translate-y-0.5 hover:bg-[#e97812] active:translate-y-[0.5px]',
   outline:
-    'border border-border bg-white text-brand-950 hover:border-brand-950 hover:bg-brand-950/5 active:translate-y-px',
-  ghost: 'bg-transparent text-brand-950 hover:bg-brand-950/8',
+    'border border-border bg-white text-brand-950 shadow-[0_3px_8px_rgba(32,56,72,0.12)] hover:-translate-y-0.5 hover:border-brand-950 hover:bg-brand-950/5 active:translate-y-[0.5px]',
+  ghost:
+    'bg-transparent text-brand-950 shadow-[0_2px_6px_rgba(32,56,72,0.1)] hover:-translate-y-0.5 hover:bg-white active:translate-y-[0.5px]',
   danger:
-    'bg-danger-600 text-white shadow-sm hover:bg-[#aa2f2f] active:translate-y-px',
+    'bg-danger-600 text-white shadow-[0_4px_10px_rgba(191,56,56,0.26)] hover:-translate-y-0.5 hover:bg-[#aa2f2f] active:translate-y-[0.5px]',
 }
 
 const sizes: Record<ButtonSize, string> = {
@@ -51,13 +52,15 @@ export function Button({
   type = 'button',
   ...props
 }: ButtonProps) {
+  const isDisabled = loading ? true : disabled
+
   return (
     <button
       type={type}
-      disabled={disabled || loading}
+      disabled={isDisabled}
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-df-sm font-extrabold transition-[background-color,border-color,box-shadow,opacity,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-45',
+        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-df-sm font-extrabold transition-[background-color,border-color,color,opacity,transform] duration-200 ease-out disabled:cursor-not-allowed disabled:opacity-45',
         variants[variant],
         sizes[size],
         fullWidth && 'w-full',
@@ -73,7 +76,7 @@ export function Button({
       ) : (
         leadingIcon
       )}
-      <span>{children}</span>
+      <span className="whitespace-nowrap leading-none">{children}</span>
       {!loading && trailingIcon}
     </button>
   )

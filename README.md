@@ -9,9 +9,13 @@ The current application renders the living `TestUIKit` page at the root. It incl
 ```bash
 npm install
 npm run dev
+npm run lint
 npm run typecheck
 npm run build
+npm run check
 ```
+
+`npm run check` is the complete local quality gate: ESLint, TypeScript, and the production Vite build.
 
 ## UI kit
 

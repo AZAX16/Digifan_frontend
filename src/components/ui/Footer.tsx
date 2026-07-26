@@ -2,7 +2,7 @@ import { cn } from '../../utils/cn'
 
 export interface FooterColumn {
   title: string
-  links: Array<{ label: string; href: string }>
+  links: { label: string; href: string }[]
 }
 
 export interface FooterProps {

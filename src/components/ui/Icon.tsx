@@ -1,9 +1,8 @@
-import type { CSSProperties, HTMLAttributes } from 'react'
+import type { HTMLAttributes } from 'react'
 
 import cartIcon from '../../assets/figma-cart.svg'
 import checkIcon from '../../assets/figma-check.svg'
 import photoIcon from '../../assets/figma-photo.svg'
-import starIcon from '../../assets/figma-star-filled.svg'
 import { cn } from '../../utils/cn'
 
 const imageIcons = {
@@ -39,24 +38,20 @@ export function Icon({
       <span
         {...accessibility}
         {...props}
-        className={cn('inline-block shrink-0', className)}
-        style={
-          {
-            width: size,
-            height: size,
-            backgroundColor: tone,
-            maskImage: `url(${starIcon})`,
-            maskPosition: 'center',
-            maskRepeat: 'no-repeat',
-            maskSize: 'contain',
-            WebkitMaskImage: `url(${starIcon})`,
-            WebkitMaskPosition: 'center',
-            WebkitMaskRepeat: 'no-repeat',
-            WebkitMaskSize: 'contain',
-            ...style,
-          } as CSSProperties
-        }
-      />
+        className={cn('inline-flex shrink-0 items-center justify-center', className)}
+        style={{ width: size, height: size, color: tone, ...style }}
+      >
+        <svg
+          aria-hidden="true"
+          className="block h-full w-full overflow-visible"
+          viewBox="0 0 20 19"
+        >
+          <path
+            d="M3.825 19L5.45 11.975L0 7.25L7.2 6.625L10 0L12.8 6.625L20 7.25L14.55 11.975L16.175 19L10 15.275L3.825 19Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
     )
   }
 
