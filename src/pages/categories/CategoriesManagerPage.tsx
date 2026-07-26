@@ -1,0 +1,425 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+
+import {
+  ApiError,
+  createCategory,
+  deleteCategory,
+  getCategories,
+  updateCategory,
+  type Category,
+  type CategoryInput,
+} from '../../api/categories'
+import { Alert, Button, Dropdown, Input, Surface, Textarea } from '../../components/ui'
+import { toPersianDigits } from '../../utils/persianDigits'
+
+interface CategoryForm {
+  name: string
+  description: string
+  parentCategoryId: string
+}
+
+interface Feedback {
+  variant: 'success' | 'danger'
+  title: string
+}
+
+type PendingAction = 'save' | 'delete' | 'refresh' | null
+
+const EMPTY_FORM: CategoryForm = {
+  name: '',
+  description: '',
+  parentCategoryId: '',
+}
+
+const ALL_PARENT_FILTER = 'all'
+const NO_PARENT_FILTER = 'no-parent'
+
+function getCategoryLabel(category: Category) {
+  const name = category.name?.trim()
+
+  return name?.length ? name : 'دسته‌بندی بدون نام'
+}
+
+function getActionError(error: unknown) {
+  return error instanceof ApiError ? error.message : 'خطای پیش‌بینی‌نشده‌ای رخ داد.'
+}
+
+export function CategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState('')
+  const [parentFilter, setParentFilter] = useState(ALL_PARENT_FILTER)
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [form, setForm] = useState<CategoryForm>(EMPTY_FORM)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === selectedCategoryId),
+    [categories, selectedCategoryId],
+  )
+
+  const filteredCategories = useMemo(() => {
+    if (parentFilter === ALL_PARENT_FILTER) return categories
+
+    return categories.filter((category) =>
+      parentFilter === NO_PARENT_FILTER
+        ? category.parentCategoryId === null
+        : category.parentCategoryId === parentFilter,
+    )
+  }, [categories, parentFilter])
+
+  const categoryOptions = useMemo(
+    () =>
+      filteredCategories.map((category) => ({
+        value: category.id,
+        label: getCategoryLabel(category),
+      })),
+    [filteredCategories],
+  )
+
+  const parentFilterOptions = useMemo(
+    () => {
+      const usedParentIds = new Set(
+        categories.flatMap((category) =>
+          category.parentCategoryId ? [category.parentCategoryId] : [],
+        ),
+      )
+
+      return [
+        { value: ALL_PARENT_FILTER, label: 'همه دسته‌بندی‌ها' },
+        { value: NO_PARENT_FILTER, label: 'بدون دسته‌بندی مادر' },
+        ...categories
+          .filter((category) => usedParentIds.has(category.id))
+          .map((category) => ({ value: category.id, label: getCategoryLabel(category) })),
+      ]
+    },
+    [categories],
+  )
+
+  const parentOptions = useMemo(
+    () => [
+      { value: '', label: 'بدون دسته‌بندی مادر' },
+      ...categories
+        .filter((category) => category.id !== editingCategoryId)
+        .map((category) => ({
+          value: category.id,
+          label: getCategoryLabel(category),
+        })),
+    ],
+    [categories, editingCategoryId],
+  )
+
+  useEffect(() => {
+    let isActive = true
+
+    void getCategories()
+      .then((nextCategories) => {
+        if (!isActive) return
+
+        setCategories(nextCategories)
+        setSelectedCategoryId((currentId) =>
+          nextCategories.some((category) => category.id === currentId) ? currentId : '',
+        )
+      })
+      .catch((error: unknown) => {
+        if (!isActive) return
+
+        setFeedback({ variant: 'danger', title: getActionError(error) })
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false)
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  const resetEditor = () => {
+    setEditingCategoryId(null)
+    setForm(EMPTY_FORM)
+  }
+
+  const handleRefresh = async () => {
+    setPendingAction('refresh')
+    setIsLoading(true)
+    setFeedback(null)
+
+    try {
+      const nextCategories = await getCategories()
+      setCategories(nextCategories)
+      setSelectedCategoryId((currentId) =>
+        nextCategories.some((category) => category.id === currentId) ? currentId : '',
+      )
+      setFeedback({ variant: 'success', title: 'فهرست دسته‌بندی‌ها به‌روز شد.' })
+    } catch (error) {
+      setFeedback({ variant: 'danger', title: getActionError(error) })
+    } finally {
+      setIsLoading(false)
+      setPendingAction(null)
+    }
+  }
+
+  const handleEdit = () => {
+    if (!selectedCategory) return
+
+    setEditingCategoryId(selectedCategory.id)
+    setForm({
+      name: selectedCategory.name ?? '',
+      description: selectedCategory.description ?? '',
+      parentCategoryId: selectedCategory.parentCategoryId ?? '',
+    })
+    setFeedback(null)
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const name = form.name.trim()
+    const description = form.description.trim()
+
+    if (!name) {
+      setFeedback({ variant: 'danger', title: 'نام دسته‌بندی را وارد کنید.' })
+      return
+    }
+
+    const input: CategoryInput = {
+      name,
+      description: description.length ? description : null,
+      parentCategoryId: form.parentCategoryId.length ? form.parentCategoryId : null,
+    }
+
+    setPendingAction('save')
+    setFeedback(null)
+
+    try {
+      if (editingCategoryId) {
+        await updateCategory(editingCategoryId, input)
+        setCategories((currentCategories) =>
+          currentCategories.map((category) =>
+            category.id === editingCategoryId ? { id: category.id, ...input } : category,
+          ),
+        )
+        setFeedback({ variant: 'success', title: 'دسته‌بندی ویرایش شد.' })
+      } else {
+        const id = await createCategory(input)
+        setCategories((currentCategories) => [...currentCategories, { id, ...input }])
+        setSelectedCategoryId(id)
+        setParentFilter(input.parentCategoryId ?? NO_PARENT_FILTER)
+        setFeedback({ variant: 'success', title: 'دسته‌بندی جدید اضافه شد.' })
+      }
+
+      resetEditor()
+    } catch (error) {
+      setFeedback({ variant: 'danger', title: getActionError(error) })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedCategory) return
+
+    const categoryLabel = getCategoryLabel(selectedCategory)
+    const confirmed = window.confirm(`دسته‌بندی «${categoryLabel}» حذف شود؟`)
+
+    if (!confirmed) return
+
+    setPendingAction('delete')
+    setFeedback(null)
+
+    try {
+      await deleteCategory(selectedCategory.id)
+      setCategories((currentCategories) =>
+        currentCategories.filter((category) => category.id !== selectedCategory.id),
+      )
+      setSelectedCategoryId('')
+
+      if (editingCategoryId === selectedCategory.id) resetEditor()
+
+      setFeedback({ variant: 'success', title: 'دسته‌بندی حذف شد.' })
+    } catch (error) {
+      setFeedback({ variant: 'danger', title: getActionError(error) })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const parentCategory = selectedCategory?.parentCategoryId
+    ? categories.find((category) => category.id === selectedCategory.parentCategoryId)
+    : undefined
+  const selectedDescription = selectedCategory?.description?.trim()
+  const isBusy = pendingAction !== null
+
+  return (
+    <main className="mx-auto min-h-screen max-w-5xl px-4 py-8 sm:px-6 lg:py-12" dir="rtl">
+      <header className="mb-7">
+        <p className="mb-1 text-sm font-bold text-accent-500">نسخه آزمایشی اتصال به API</p>
+        <h1 className="m-0 text-2xl font-black text-brand-950 sm:text-3xl">
+          مدیریت دسته‌بندی‌ها
+        </h1>
+        <p className="mb-0 mt-2 max-w-2xl text-sm leading-7 text-muted">
+          در این صفحه می‌توانید دسته‌بندی‌ها را مشاهده، اضافه، ویرایش یا حذف کنید.
+        </p>
+      </header>
+
+      {feedback && (
+        <Alert
+          className="mb-5"
+          live
+          title={feedback.title}
+          variant={feedback.variant}
+        />
+      )}
+
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <Surface elevation="raised" padding="lg">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="m-0 text-lg font-black text-brand-950">فهرست دسته‌بندی‌ها</h2>
+              <p className="mb-0 mt-1 text-xs text-muted">
+                {isLoading ? 'در حال دریافت اطلاعات…' : (
+                  `${toPersianDigits(String(filteredCategories.length))} از ${toPersianDigits(
+                    String(categories.length),
+                  )} دسته‌بندی`
+                )}
+              </p>
+            </div>
+            <Button
+              disabled={isBusy}
+              loading={pendingAction === 'refresh'}
+              size="sm"
+              variant="outline"
+              onClick={() => void handleRefresh()}
+            >
+              به‌روزرسانی
+            </Button>
+          </div>
+
+          <div className="grid gap-4">
+            <Dropdown
+              disabled={isLoading || categories.length === 0 || isBusy}
+              label="فیلتر بر اساس دسته‌بندی مادر"
+              options={parentFilterOptions}
+              value={parentFilter}
+              onChange={(value) => {
+                setParentFilter(value)
+                setSelectedCategoryId('')
+              }}
+            />
+            <Dropdown
+              disabled={isLoading || filteredCategories.length === 0 || isBusy}
+              label="دسته‌بندی"
+              options={categoryOptions}
+              placeholder={
+                isLoading
+                  ? 'در حال بارگذاری…'
+                  : filteredCategories.length === 0
+                    ? 'دسته‌بندی‌ای در این فیلتر نیست'
+                    : 'یک دسته‌بندی انتخاب کنید'
+              }
+              value={selectedCategoryId}
+              onChange={setSelectedCategoryId}
+            />
+          </div>
+
+          {selectedCategory ? (
+            <div className="mt-4 rounded-df-md border border-border-soft bg-canvas/60 p-4">
+              <h3 className="m-0 text-base font-black text-brand-950">
+                {getCategoryLabel(selectedCategory)}
+              </h3>
+              <p className="mb-0 mt-2 min-h-6 text-sm leading-6 text-muted">
+                {selectedDescription?.length
+                  ? selectedDescription
+                  : 'توضیحی برای این دسته‌بندی ثبت نشده است.'}
+              </p>
+              <p className="mb-0 mt-3 text-xs text-muted">
+                دسته‌بندی مادر:{' '}
+                <span className="font-bold text-ink">
+                  {parentCategory ? getCategoryLabel(parentCategory) : 'ندارد'}
+                </span>
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button disabled={isBusy} size="sm" variant="outline" onClick={handleEdit}>
+                  ویرایش
+                </Button>
+                <Button
+                  disabled={isBusy}
+                  loading={pendingAction === 'delete'}
+                  size="sm"
+                  variant="danger"
+                  onClick={() => void handleDelete()}
+                >
+                  حذف
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-df-md border border-dashed border-border p-5 text-center text-sm text-muted">
+              {isLoading
+                ? 'دسته‌بندی‌ها در حال دریافت هستند.'
+                : categories.length === 0
+                  ? 'هنوز دسته‌بندی‌ای ثبت نشده است.'
+                  : filteredCategories.length === 0
+                    ? 'دسته‌بندی‌ای با این فیلتر پیدا نشد.'
+                  : 'برای مشاهده جزئیات، یک دسته‌بندی انتخاب کنید.'}
+            </div>
+          )}
+        </Surface>
+
+        <Surface elevation="raised" padding="lg">
+          <h2 className="m-0 text-lg font-black text-brand-950">
+            {editingCategoryId ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی'}
+          </h2>
+          <p className="mb-5 mt-1 text-xs leading-6 text-muted">
+            نام الزامی است؛ توضیحات و دسته‌بندی مادر اختیاری هستند.
+          </p>
+
+          <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
+            <Input
+              required
+              disabled={isBusy}
+              label="نام دسته‌بندی"
+              maxLength={120}
+              placeholder="برای مثال: پمپ آب"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+            />
+            <Textarea
+              disabled={isBusy}
+              label="توضیحات"
+              maxLength={500}
+              placeholder="توضیح کوتاهی درباره این دسته‌بندی"
+              value={form.description}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, description: event.target.value }))
+              }
+            />
+            <Dropdown
+              disabled={isBusy}
+              label="دسته‌بندی مادر"
+              options={parentOptions}
+              value={form.parentCategoryId}
+              onChange={(parentCategoryId) =>
+                setForm((current) => ({ ...current, parentCategoryId }))
+              }
+            />
+
+            <div className="mt-1 flex flex-wrap gap-2">
+              <Button loading={pendingAction === 'save'} type="submit">
+                {editingCategoryId ? 'ذخیره تغییرات' : 'افزودن دسته‌بندی'}
+              </Button>
+              {editingCategoryId && (
+                <Button disabled={isBusy} variant="ghost" onClick={resetEditor}>
+                  انصراف
+                </Button>
+              )}
+            </div>
+          </form>
+        </Surface>
+      </div>
+    </main>
+  )
+}
