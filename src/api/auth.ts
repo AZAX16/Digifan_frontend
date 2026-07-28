@@ -1,0 +1,275 @@
+import { ApiError, apiRequest } from './client'
+
+export interface AdminLoginRequest {
+  email: string
+  password: string
+}
+
+export interface AdminAuthResult {
+  accessToken: string | null
+  accessTokenExpiresAt: string | null
+  refreshToken: string | null
+  refreshTokenExpiresAt: string | null
+}
+
+export interface AdminProfile {
+  id: string
+  email: string | null
+  isActive: boolean
+}
+
+interface RefreshSession {
+  refreshToken: string
+  refreshTokenExpiresAt: string
+}
+
+interface ActiveSession extends RefreshSession {
+  accessToken: string
+  accessTokenExpiresAt: string
+}
+
+const STORAGE_KEY = 'digifan.admin.refresh-session.v1'
+const ACCESS_TOKEN_LEEWAY_MS = 15_000
+const sessionListeners = new Set<() => void>()
+
+let activeSession: ActiveSession | null = null
+let refreshRequest: Promise<ActiveSession> | undefined
+let restoreRequest: Promise<boolean> | undefined
+let profileRequest: Promise<AdminProfile> | undefined
+
+function isFutureDate(value: string | null | undefined, leewayMs = 0) {
+  if (!value) return false
+
+  const timestamp = Date.parse(value)
+
+  return Number.isFinite(timestamp) && timestamp > Date.now() + leewayMs
+}
+
+function readStoredRefreshSession(): RefreshSession | null {
+  try {
+    const storedValue = window.sessionStorage.getItem(STORAGE_KEY)
+
+    if (!storedValue) return null
+
+    const parsedValue = JSON.parse(storedValue) as Partial<RefreshSession>
+
+    if (
+      typeof parsedValue.refreshToken !== 'string' ||
+      !parsedValue.refreshToken.trim() ||
+      typeof parsedValue.refreshTokenExpiresAt !== 'string' ||
+      !isFutureDate(parsedValue.refreshTokenExpiresAt)
+    ) {
+      window.sessionStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+
+    return {
+      refreshToken: parsedValue.refreshToken,
+      refreshTokenExpiresAt: parsedValue.refreshTokenExpiresAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+function storeRefreshSession(session: RefreshSession | null) {
+  try {
+    if (session && isFutureDate(session.refreshTokenExpiresAt)) {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+    } else {
+      window.sessionStorage.removeItem(STORAGE_KEY)
+    }
+  } catch {
+    // Authentication still works in memory when browser storage is unavailable.
+  }
+}
+
+function notifySessionListeners() {
+  sessionListeners.forEach((listener) => listener())
+}
+
+function clearSession() {
+  activeSession = null
+  profileRequest = undefined
+  storeRefreshSession(null)
+  notifySessionListeners()
+}
+
+function commitAuthResult(result: AdminAuthResult, fallback?: RefreshSession) {
+  const accessToken = result.accessToken?.trim()
+  const accessTokenExpiresAt = result.accessTokenExpiresAt
+  const nextRefreshToken = result.refreshToken?.trim()
+  const refreshToken = nextRefreshToken?.length ? nextRefreshToken : fallback?.refreshToken
+  const nextRefreshTokenExpiresAt = result.refreshTokenExpiresAt
+  const refreshTokenExpiresAt = nextRefreshToken?.length
+    ? nextRefreshTokenExpiresAt
+    : fallback?.refreshTokenExpiresAt
+
+  if (!accessToken || !accessTokenExpiresAt || !isFutureDate(accessTokenExpiresAt)) {
+    clearSession()
+    throw new ApiError(500, 'سرور توکن دسترسی معتبر برنگرداند.')
+  }
+
+  if (!refreshToken || !refreshTokenExpiresAt || !isFutureDate(refreshTokenExpiresAt)) {
+    clearSession()
+    throw new ApiError(500, 'سرور توکن نوسازی معتبر برنگرداند.')
+  }
+
+  activeSession = {
+    accessToken,
+    accessTokenExpiresAt,
+    refreshToken,
+    refreshTokenExpiresAt,
+  }
+  storeRefreshSession({ refreshToken, refreshTokenExpiresAt })
+  notifySessionListeners()
+
+  return activeSession
+}
+
+function getRefreshSession() {
+  if (activeSession && isFutureDate(activeSession.refreshTokenExpiresAt)) {
+    return {
+      refreshToken: activeSession.refreshToken,
+      refreshTokenExpiresAt: activeSession.refreshTokenExpiresAt,
+    }
+  }
+
+  return readStoredRefreshSession()
+}
+
+function withAccessToken(init: RequestInit, accessToken: string) {
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${accessToken}`)
+
+  return { ...init, headers }
+}
+
+export function subscribeToAdminSession(listener: () => void) {
+  sessionListeners.add(listener)
+
+  return () => sessionListeners.delete(listener)
+}
+
+export function hasActiveAdminSession() {
+  return activeSession !== null
+}
+
+export function hasStoredAdminSession() {
+  return readStoredRefreshSession() !== null
+}
+
+export async function loginAdmin(input: AdminLoginRequest) {
+  const result = await apiRequest<AdminAuthResult>('/api/auth/admin/login', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+
+  commitAuthResult(result)
+}
+
+export function refreshAdminSession() {
+  if (refreshRequest) return refreshRequest
+
+  const refreshSession = getRefreshSession()
+
+  if (!refreshSession) {
+    clearSession()
+    return Promise.reject(new ApiError(401, 'نشست شما منقضی شده است. دوباره وارد شوید.'))
+  }
+
+  refreshRequest = apiRequest<AdminAuthResult>('/api/auth/admin/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken: refreshSession.refreshToken }),
+  })
+    .then((result) => commitAuthResult(result, refreshSession))
+    .catch((error: unknown) => {
+      clearSession()
+      throw error
+    })
+    .finally(() => {
+      refreshRequest = undefined
+    })
+
+  return refreshRequest
+}
+
+export function restoreAdminSession() {
+  if (activeSession) return Promise.resolve(true)
+  if (!hasStoredAdminSession()) return Promise.resolve(false)
+  if (restoreRequest) return restoreRequest
+
+  restoreRequest = refreshAdminSession()
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      restoreRequest = undefined
+    })
+
+  return restoreRequest
+}
+
+async function getAccessToken() {
+  if (activeSession && isFutureDate(activeSession.accessTokenExpiresAt, ACCESS_TOKEN_LEEWAY_MS)) {
+    return activeSession.accessToken
+  }
+
+  return (await refreshAdminSession()).accessToken
+}
+
+export async function authorizedRequest<T>(path: string, init: RequestInit = {}) {
+  const accessToken = await getAccessToken()
+
+  try {
+    return await apiRequest<T>(path, withAccessToken(init, accessToken))
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error
+  }
+
+  const refreshedSession = await refreshAdminSession()
+
+  try {
+    return await apiRequest<T>(path, withAccessToken(init, refreshedSession.accessToken))
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) clearSession()
+    throw error
+  }
+}
+
+export function getAdminProfile() {
+  profileRequest ??= authorizedRequest<AdminProfile>('/api/admin/account/profile').finally(() => {
+    profileRequest = undefined
+  })
+
+  return profileRequest
+}
+
+export function changeAdminEmail(newEmail: string) {
+  return authorizedRequest<void>('/api/admin/account/change-email', {
+    method: 'POST',
+    body: JSON.stringify({ newEmail }),
+  })
+}
+
+export function changeAdminPassword(currentPassword: string, newPassword: string) {
+  return authorizedRequest<void>('/api/admin/account/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
+export async function logoutAdmin() {
+  try {
+    const accessToken = await getAccessToken()
+    const refreshSession = getRefreshSession()
+
+    if (refreshSession) {
+      await apiRequest<void>('/api/auth/admin/logout', withAccessToken({
+        method: 'POST',
+        body: JSON.stringify({ refreshToken: refreshSession.refreshToken }),
+      }, accessToken))
+    }
+  } finally {
+    clearSession()
+  }
+}

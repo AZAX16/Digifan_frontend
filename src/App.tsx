@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 
+import { AdminAccountPanel } from './components/auth/AdminAccountPanel'
+import { AuthProvider } from './components/auth/AuthProvider'
+import { useAuth } from './components/auth/authContext'
 import { Button } from './components/ui'
+import { AdminAuthPage } from './pages/auth/AdminAuthPage'
 import { CategoriesPage } from './pages/categories'
 import { TestUIKit } from './pages/TestUIKit'
 
@@ -10,8 +14,39 @@ function getPageFromHash(): AppPage {
   return window.location.hash === '#/ui-kit' ? 'ui-kit' : 'categories'
 }
 
-export function App() {
+function ProtectedCategories() {
+  const { status } = useAuth()
+
+  if (status === 'checking') {
+    return (
+      <main
+        className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4"
+        dir="rtl"
+      >
+        <div className="text-center" role="status">
+          <span
+            aria-hidden="true"
+            className="mx-auto block size-8 animate-spin rounded-full border-4 border-brand-950/20 border-l-brand-950"
+          />
+          <p className="mb-0 mt-3 text-sm font-bold text-muted">در حال بررسی نشست مدیر…</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (status === 'anonymous') return <AdminAuthPage />
+
+  return (
+    <>
+      <AdminAccountPanel />
+      <CategoriesPage />
+    </>
+  )
+}
+
+function AppContent() {
   const [page, setPage] = useState<AppPage>(getPageFromHash)
+  const { status } = useAuth()
   const isUIKit = page === 'ui-kit'
 
   useEffect(() => {
@@ -22,6 +57,11 @@ export function App() {
   }, [])
 
   const navigateTo: AppPage = isUIKit ? 'categories' : 'ui-kit'
+  const pageLabel = isUIKit
+    ? 'راهنمای رابط کاربری'
+    : status === 'authenticated'
+      ? 'مدیریت دسته‌بندی‌ها'
+      : 'ورود مدیر'
 
   return (
     <div className="min-h-screen">
@@ -35,9 +75,7 @@ export function App() {
         >
           <div className="flex items-center gap-2">
             <span className="font-black text-brand-950">DigiFan</span>
-            <span className="text-xs text-muted">
-              {isUIKit ? 'راهنمای رابط کاربری' : 'مدیریت دسته‌بندی‌ها'}
-            </span>
+            <span className="text-xs text-muted">{pageLabel}</span>
           </div>
           <Button
             size="sm"
@@ -51,7 +89,15 @@ export function App() {
         </nav>
       </header>
 
-      {isUIKit ? <TestUIKit /> : <CategoriesPage />}
+      {isUIKit ? <TestUIKit /> : <ProtectedCategories />}
     </div>
+  )
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
