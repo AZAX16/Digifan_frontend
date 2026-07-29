@@ -7,8 +7,18 @@ function firstConfiguredValue(...values: (string | undefined)[]) {
   return values.find((value) => Boolean(value?.trim()))?.trim()
 }
 
+const DEFAULT_API_PROXY_TARGET = 'https://digifan-api.onrender.com'
+
 export default defineConfig(({ mode }) => {
   const fileEnv = loadEnv(mode, process.cwd(), '')
+  const apiProxyTarget = firstConfiguredValue(
+    process.env.VITE_DEV_API_PROXY_TARGET,
+    fileEnv.VITE_DEV_API_PROXY_TARGET,
+  ) ?? DEFAULT_API_PROXY_TARGET
+  const useEnvironmentProxy = firstConfiguredValue(
+    process.env.VITE_DEV_API_PROXY_USE_ENV,
+    fileEnv.VITE_DEV_API_PROXY_USE_ENV,
+  )?.toLowerCase() !== 'false'
   const configuredHttpProxy = firstConfiguredValue(
     process.env.HTTP_PROXY,
     process.env.http_proxy,
@@ -30,14 +40,15 @@ export default defineConfig(({ mode }) => {
     fileEnv.no_proxy,
   )
   const proxyEnv = { ...process.env, HTTP_PROXY: httpProxy, HTTPS_PROXY: httpsProxy, NO_PROXY: noProxy }
-  const apiProxyAgent = httpProxy || httpsProxy ? new https.Agent({ proxyEnv }) : undefined
+  const apiProxyAgent = useEnvironmentProxy && (httpProxy || httpsProxy)
+    ? new https.Agent({ proxyEnv }) : undefined
 
   return {
     plugins: [react(), tailwindcss()],
     server: {
       proxy: {
         '/api': {
-          target: 'https://digifan-api.onrender.com',
+          target: apiProxyTarget,
           changeOrigin: true,
           agent: apiProxyAgent,
         },

@@ -12,6 +12,24 @@ export interface AdminAuthResult {
   refreshTokenExpiresAt: string | null
 }
 
+interface AdminLoginResult extends AdminAuthResult {
+  requiresTwoFactor: boolean
+  twoFactorToken: string | null
+  twoFactorTokenExpiresAt: string | null
+}
+
+export interface AdminTwoFactorChallenge {
+  token: string
+  expiresAt: string | null
+}
+
+export type AdminLoginOutcome =
+  | { status: 'authenticated' }
+  | {
+      status: 'two-factor-required'
+      challenge: AdminTwoFactorChallenge
+    }
+
 export interface AdminProfile {
   id: string
   email: string | null
@@ -160,9 +178,43 @@ export function hasStoredAdminSession() {
 }
 
 export async function loginAdmin(input: AdminLoginRequest) {
-  const result = await apiRequest<AdminAuthResult>('/api/auth/admin/login', {
+  const result = await apiRequest<AdminLoginResult>('/api/auth/admin/login', {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+
+  if (result.requiresTwoFactor) {
+    const token = result.twoFactorToken?.trim()
+
+    if (!token) throw new ApiError(500, 'سرور توکن احراز هویت دومرحله‌ای برنگرداند.')
+    if (result.twoFactorTokenExpiresAt && !isFutureDate(result.twoFactorTokenExpiresAt)) {
+      throw new ApiError(401, 'مهلت احراز هویت دومرحله‌ای تمام شده است. دوباره وارد شوید.')
+    }
+
+    return {
+      status: 'two-factor-required',
+      challenge: {
+        token,
+        expiresAt: result.twoFactorTokenExpiresAt,
+      },
+    } satisfies AdminLoginOutcome
+  }
+
+  commitAuthResult(result)
+  return { status: 'authenticated' } satisfies AdminLoginOutcome
+}
+
+export function requestAdminTwoFactorCode(twoFactorToken: string) {
+  return apiRequest<void>('/api/auth/admin/2fa/request', {
+    method: 'POST',
+    body: JSON.stringify({ twoFactorToken }),
+  })
+}
+
+export async function verifyAdminTwoFactorCode(twoFactorToken: string, code: string) {
+  const result = await apiRequest<AdminAuthResult>('/api/auth/admin/2fa/verify', {
+    method: 'POST',
+    body: JSON.stringify({ twoFactorToken, code }),
   })
 
   commitAuthResult(result)
