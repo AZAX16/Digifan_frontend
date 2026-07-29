@@ -146,13 +146,14 @@ export function TestUIKit() {
 
           <nav aria-label="بخش‌های صفحه" className="flex flex-wrap gap-2">
             {pageSections.map(([id, label]) => (
-              <a
+              <button
                 key={id}
-                href={`#${id}`}
+                type="button"
                 className="rounded-df-sm border border-border-soft bg-surface px-3 py-2 text-xs font-bold text-brand-950 no-underline transition-colors hover:border-brand-950 hover:bg-white"
+                onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })}
               >
                 {label}
-              </a>
+              </button>
             ))}
           </nav>
         </div>

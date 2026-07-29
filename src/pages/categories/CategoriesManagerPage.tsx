@@ -5,11 +5,12 @@ import {
   createCategory,
   deleteCategory,
   getCategories,
+  invalidateCategoryQueries,
   updateCategory,
   type Category,
   type CategoryInput,
 } from '../../api/categories'
-import { Alert, Button, Dropdown, Input, Surface, Textarea } from '../../components/ui'
+import { Alert, Button, Dropdown, Input, Pagination, Surface, Textarea } from '../../components/ui'
 import { toPersianDigits } from '../../utils/persianDigits'
 
 interface CategoryForm {
@@ -33,6 +34,7 @@ const EMPTY_FORM: CategoryForm = {
 
 const ALL_PARENT_FILTER = 'all'
 const NO_PARENT_FILTER = 'no-parent'
+const CATEGORIES_PER_PAGE = 20
 
 function getCategoryLabel(category: Category) {
   const name = category.name?.trim()
@@ -44,6 +46,31 @@ function getActionError(error: unknown) {
   return error instanceof ApiError ? error.message : 'خطای پیش‌بینی‌نشده‌ای رخ داد.'
 }
 
+function getUnavailableParentIds(categories: Category[], editingCategoryId: string | null) {
+  const unavailableIds = new Set<string>()
+  if (!editingCategoryId) return unavailableIds
+
+  const childrenByParentId = new Map<string, string[]>()
+  categories.forEach((category) => {
+    if (!category.parentCategoryId) return
+
+    const childIds = childrenByParentId.get(category.parentCategoryId) ?? []
+    childIds.push(category.id)
+    childrenByParentId.set(category.parentCategoryId, childIds)
+  })
+
+  const pendingIds = [editingCategoryId]
+  while (pendingIds.length > 0) {
+    const currentId = pendingIds.pop()
+    if (!currentId || unavailableIds.has(currentId)) continue
+
+    unavailableIds.add(currentId)
+    pendingIds.push(...(childrenByParentId.get(currentId) ?? []))
+  }
+
+  return unavailableIds
+}
+
 export function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [parentFilter, setParentFilter] = useState(ALL_PARENT_FILTER)
@@ -53,6 +80,7 @@ export function CategoriesPage() {
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [listPage, setListPage] = useState(1)
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -68,6 +96,13 @@ export function CategoriesPage() {
         : category.parentCategoryId === parentFilter,
     )
   }, [categories, parentFilter])
+  const listPageCount = Math.max(1, Math.ceil(filteredCategories.length / CATEGORIES_PER_PAGE))
+  const currentListPage = Math.min(listPage, listPageCount)
+  const visibleCategories = useMemo(() => {
+    const startIndex = (currentListPage - 1) * CATEGORIES_PER_PAGE
+
+    return filteredCategories.slice(startIndex, startIndex + CATEGORIES_PER_PAGE)
+  }, [currentListPage, filteredCategories])
 
   const parentFilterOptions = useMemo(
     () => {
@@ -89,15 +124,19 @@ export function CategoriesPage() {
   )
 
   const parentOptions = useMemo(
-    () => [
-      { value: '', label: 'بدون دسته‌بندی بالاسری' },
-      ...categories
-        .filter((category) => category.id !== editingCategoryId)
-        .map((category) => ({
-          value: category.id,
-          label: getCategoryLabel(category),
-        })),
-    ],
+    () => {
+      const unavailableParentIds = getUnavailableParentIds(categories, editingCategoryId)
+
+      return [
+        { value: '', label: 'بدون دسته‌بندی بالاسری' },
+        ...categories
+          .filter((category) => !unavailableParentIds.has(category.id))
+          .map((category) => ({
+            value: category.id,
+            label: getCategoryLabel(category),
+          })),
+      ]
+    },
     [categories, editingCategoryId],
   )
 
@@ -135,6 +174,7 @@ export function CategoriesPage() {
     setFeedback(null)
 
     try {
+      invalidateCategoryQueries()
       const nextCategories = await getCategories()
       setCategories(nextCategories)
       setFeedback({ variant: 'success', title: 'فهرست دسته‌بندی‌ها به‌روز شد.' })
@@ -194,6 +234,7 @@ export function CategoriesPage() {
       }
 
       resetEditor()
+      setListPage(1)
     } catch (error) {
       setFeedback({ variant: 'danger', title: getActionError(error) })
     } finally {
@@ -280,7 +321,10 @@ export function CategoriesPage() {
             label="فیلتر بر اساس دسته‌بندی بالاسری"
             options={parentFilterOptions}
             value={parentFilter}
-            onChange={setParentFilter}
+            onChange={(nextParentFilter) => {
+              setParentFilter(nextParentFilter)
+              setListPage(1)
+            }}
           />
 
           {isLoading || filteredCategories.length === 0 ? (
@@ -293,7 +337,7 @@ export function CategoriesPage() {
             </div>
           ) : (
             <div className="mt-4 grid gap-3">
-              {filteredCategories.map((category) => {
+              {visibleCategories.map((category) => {
                 const parentCategory = category.parentCategoryId
                   ? categoryById.get(category.parentCategoryId)
                   : undefined
@@ -340,6 +384,14 @@ export function CategoriesPage() {
                   </article>
                 )
               })}
+              {listPageCount > 1 && (
+                <Pagination
+                  className="mt-2"
+                  page={currentListPage}
+                  pageCount={listPageCount}
+                  onPageChange={setListPage}
+                />
+              )}
             </div>
           )}
         </Surface>

@@ -83,7 +83,7 @@ export function SortBar({
             className={cn(
               'min-h-8 cursor-pointer whitespace-nowrap rounded-df-sm border px-3 text-xs font-bold transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30',
               selected
-                ? 'border-accent-500 bg-accent-500 text-white shadow-[0_3px_8px_rgba(248,139,36,0.24)] hover:bg-[#e97812]'
+                ? 'border-accent-500 bg-accent-500 text-brand-950 shadow-[0_3px_8px_rgba(248,139,36,0.24)] hover:bg-[#ff9d45]'
                 : 'border-transparent bg-transparent text-muted hover:bg-canvas hover:text-brand-950',
             )}
             onKeyDown={(event) => handleKeyDown(event, index)}

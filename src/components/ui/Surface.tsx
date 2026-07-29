@@ -1,10 +1,11 @@
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, Ref } from 'react'
 
 import { cn } from '../../utils/cn'
 
 export interface SurfaceProps extends HTMLAttributes<HTMLDivElement> {
   elevation?: 'flat' | 'raised' | 'card'
   padding?: 'none' | 'sm' | 'md' | 'lg'
+  ref?: Ref<HTMLDivElement>
 }
 
 const elevations = {

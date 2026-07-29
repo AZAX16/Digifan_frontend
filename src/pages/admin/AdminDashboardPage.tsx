@@ -12,8 +12,8 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
 
-import { getBrands } from '../../api/brands'
-import { getCategories } from '../../api/categories'
+import { getBrandCount, invalidateBrandQueries } from '../../api/brands'
+import { getCategoryCount, invalidateCategoryQueries } from '../../api/categories'
 import { ApiError } from '../../api/client'
 import { getProducts } from '../../api/products'
 import { Alert, Button, Skeleton, Surface } from '../../components/ui'
@@ -76,7 +76,7 @@ function MetricCard({ label, value, description, icon: Icon, progress }: MetricC
       <div className="absolute inset-x-4 bottom-5 h-1.5 overflow-hidden rounded-full bg-[#edeef0]">
         <span
           className="block h-full rounded-full bg-[#293647] transition-[width] duration-500"
-          style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+          style={{ width: `${progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%` }}
         />
       </div>
       <span aria-hidden="true" className="absolute inset-x-px bottom-px h-1 bg-[#edeef0]" />
@@ -90,34 +90,49 @@ export function AdminDashboardPage() {
   const [resolvedRefreshKey, setResolvedRefreshKey] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const isLoading = resolvedRefreshKey !== refreshKey
+  const handleRefresh = () => {
+    invalidateBrandQueries()
+    invalidateCategoryQueries()
+    setRefreshKey((currentKey) => currentKey + 1)
+  }
 
   useEffect(() => {
     const abortController = new AbortController()
     let isActive = true
 
-    void Promise.all([
+    void Promise.allSettled([
       getProducts({ page: 1, pageSize: 1 }, abortController.signal),
       getProducts({ page: 1, pageSize: 1, status: 'active' }, abortController.signal),
       getProducts({ page: 1, pageSize: 1, status: 'draft' }, abortController.signal),
       getProducts({ page: 1, pageSize: 1, status: 'archived' }, abortController.signal),
-      getCategories(abortController.signal),
-      getBrands(abortController.signal),
-    ])
-      .then(([allProducts, active, drafts, archived, categories, brands]) => {
+      getCategoryCount(abortController.signal),
+      getBrandCount(abortController.signal),
+    ] as const)
+      .then((results) => {
         if (!isActive) return
-        setData({
-          totalProducts: allProducts.totalCount,
-          activeProducts: active.totalCount,
-          draftProducts: drafts.totalCount,
-          archivedProducts: archived.totalCount,
-          categories: categories.length,
-          brands: brands.length,
-        })
-        setFeedback(null)
-      })
-      .catch((error: unknown) => {
-        if (!isActive || (error instanceof DOMException && error.name === 'AbortError')) return
-        setFeedback(getErrorMessage(error))
+
+        const [allProducts, active, drafts, archived, categoryCount, brandCount] = results
+        setData((currentData) => ({
+          totalProducts: allProducts.status === 'fulfilled'
+            ? allProducts.value.totalCount
+            : currentData.totalProducts,
+          activeProducts: active.status === 'fulfilled'
+            ? active.value.totalCount
+            : currentData.activeProducts,
+          draftProducts: drafts.status === 'fulfilled'
+            ? drafts.value.totalCount
+            : currentData.draftProducts,
+          archivedProducts: archived.status === 'fulfilled'
+            ? archived.value.totalCount
+            : currentData.archivedProducts,
+          categories: categoryCount.status === 'fulfilled'
+            ? categoryCount.value
+            : currentData.categories,
+          brands: brandCount.status === 'fulfilled' ? brandCount.value : currentData.brands,
+        }))
+
+        const failedRequest = results.find((result) => result.status === 'rejected')
+        setFeedback(failedRequest?.status === 'rejected' ? getErrorMessage(failedRequest.reason) : null)
       })
       .finally(() => {
         if (isActive) setResolvedRefreshKey(refreshKey)
@@ -138,7 +153,7 @@ export function AdminDashboardPage() {
         value: data.totalProducts,
         description: 'ثبت‌شده در سامانه',
         icon: Boxes,
-        progress: 100,
+        progress: data.totalProducts > 0 ? 100 : 0,
       },
       {
         label: 'محصولات فعال',
@@ -178,7 +193,10 @@ export function AdminDashboardPage() {
       { label: 'فعال', value: data.activeProducts },
       { label: 'پیش‌نویس', value: data.draftProducts },
       { label: 'بایگانی', value: data.archivedProducts },
-    ].map((item) => ({ ...item, height: Math.max(8, (item.value / maxValue) * 100) }))
+    ].map((item) => ({
+      ...item,
+      height: item.value > 0 ? Math.max(8, (item.value / maxValue) * 100) : 0,
+    }))
   }, [data])
 
   const managementNotices = [
@@ -199,7 +217,9 @@ export function AdminDashboardPage() {
     },
     {
       title: 'وضعیت اتصال API',
-      description: 'اطلاعات این صفحه مستقیماً از backend دریافت شد.',
+      description: feedback
+        ? 'بخشی از اطلاعات دریافت شد؛ برای تکمیل داده‌ها دوباره تلاش کنید.'
+        : 'اطلاعات این صفحه مستقیماً از backend دریافت شد.',
       icon: BadgeCheck,
     },
   ]
@@ -272,7 +292,7 @@ export function AdminDashboardPage() {
               disabled={isLoading}
               leadingIcon={<RefreshCw aria-hidden="true" size={16} />}
               variant="outline"
-              onClick={() => setRefreshKey((currentKey) => currentKey + 1)}
+              onClick={handleRefresh}
             >
               به‌روزرسانی اطلاعات
             </Button>
@@ -331,7 +351,7 @@ export function AdminDashboardPage() {
                 type="button"
                 className="flex min-h-28 cursor-pointer items-center justify-between rounded-xl border border-[#293647] bg-white px-6 text-right transition-colors hover:bg-[#f3f4f5]"
                 onClick={() => {
-                  window.location.hash = '#/admin/products?focus=price'
+                  window.location.hash = '#/admin/products'
                 }}
               >
                 <span className="flex items-center gap-4">

@@ -2,24 +2,24 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { AuthProvider } from './components/auth/AuthProvider'
 import { useAuth } from './components/auth/authContext'
-import { Button } from './components/ui'
+import { Button } from './components/ui/Button'
 import { AdminAuthPage } from './pages/auth/AdminAuthPage'
 
-const AdminDashboardPage = lazy(() =>
-  import('./pages/admin').then(({ AdminDashboardPage: Page }) => ({ default: Page })),
-)
-const AdminAccountPage = lazy(() =>
-  import('./pages/admin').then(({ AdminAccountPage: Page }) => ({ default: Page })),
-)
-const AdminSupportPage = lazy(() =>
-  import('./pages/admin').then(({ AdminSupportPage: Page }) => ({ default: Page })),
-)
-const AdminCategoriesPage = lazy(() =>
-  import('./pages/admin').then(({ AdminCategoriesPage: Page }) => ({ default: Page })),
-)
-const AdminModerationPage = lazy(() =>
-  import('./pages/admin').then(({ AdminModerationPage: Page }) => ({ default: Page })),
-)
+const loadAdminDashboardPage = () =>
+  import('./pages/admin/AdminDashboardPage').then(({ AdminDashboardPage: Page }) => ({ default: Page }))
+const loadAdminAccountPage = () =>
+  import('./pages/admin/AdminAccountPage').then(({ AdminAccountPage: Page }) => ({ default: Page }))
+const loadAdminSupportPage = () =>
+  import('./pages/admin/AdminSupportPage').then(({ AdminSupportPage: Page }) => ({ default: Page }))
+const loadAdminCategoriesPage = () =>
+  import('./pages/admin/AdminCategoriesPage').then(({ AdminCategoriesPage: Page }) => ({ default: Page }))
+const loadAdminModerationPage = () =>
+  import('./pages/admin/AdminModerationPage').then(({ AdminModerationPage: Page }) => ({ default: Page }))
+const AdminDashboardPage = lazy(loadAdminDashboardPage)
+const AdminAccountPage = lazy(loadAdminAccountPage)
+const AdminSupportPage = lazy(loadAdminSupportPage)
+const AdminCategoriesPage = lazy(loadAdminCategoriesPage)
+const AdminModerationPage = lazy(loadAdminModerationPage)
 const TestUIKit = lazy(() =>
   import('./pages/TestUIKit').then(({ TestUIKit: Page }) => ({ default: Page })),
 )
@@ -33,6 +33,15 @@ const authenticatedPageLabels: Record<AppPage, string> = {
   account: 'تنظیمات پروفایل',
   'ui-kit': 'راهنمای رابط کاربری',
   support: 'مرکز پشتیبانی',
+}
+
+function preloadProtectedPage(page: ProtectedAppPage) {
+  if (page === 'dashboard') return loadAdminDashboardPage()
+  if (page === 'products') return loadAdminModerationPage()
+  if (page === 'categories') return loadAdminCategoriesPage()
+  if (page === 'support') return loadAdminSupportPage()
+
+  return loadAdminAccountPage()
 }
 
 
@@ -94,6 +103,16 @@ function AppContent() {
     : status === 'authenticated'
       ? authenticatedPageLabels[page]
       : 'ورود مدیر'
+
+  useEffect(() => {
+    document.title = `${pageLabel} | DigiFan`
+  }, [pageLabel])
+
+  useEffect(() => {
+    if (status === 'checking' && page !== 'ui-kit') {
+      void preloadProtectedPage(page)
+    }
+  }, [page, status])
 
   return (
     <div className="min-h-screen">

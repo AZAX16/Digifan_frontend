@@ -242,6 +242,7 @@ export function AdminSupportPage() {
                       )}
                       onClick={() => {
                         setSelectedTicketId(ticket.id)
+                        setReply('')
                         setFeedback(null)
                       }}
                     >

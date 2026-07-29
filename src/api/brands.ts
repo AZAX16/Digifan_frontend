@@ -1,4 +1,6 @@
 import { authorizedRequest } from './auth'
+import { fetchRemainingPages } from './pagination'
+import { cachedQuery, invalidateQueryPrefix } from './queryCache'
 
 export interface Brand {
   id: string
@@ -15,7 +17,8 @@ interface BrandPage {
 }
 
 type BrandsResponse = Brand[] | BrandPage
-let brandsRequest: Promise<Brand[]> | undefined
+const BRAND_LIST_STALE_TIME_MS = 60_000
+const BRAND_COUNT_STALE_TIME_MS = 30_000
 
 function getBrandItems(response: BrandsResponse) {
   if (Array.isArray(response)) return response
@@ -32,13 +35,13 @@ async function fetchBrands(signal?: AbortSignal) {
 
   if (Array.isArray(firstResponse) || firstResponse.totalPages <= 1) return firstPageItems
 
-  const remainingPages = await Promise.all(
-    Array.from({ length: firstResponse.totalPages - 1 }, (_, index) =>
+  const remainingPages = await fetchRemainingPages(
+    firstResponse.totalPages,
+    (page) =>
       authorizedRequest<BrandsResponse>(
-        `/api/admin/Brands?Page=${index + 2}&PageSize=100`,
+        `/api/admin/Brands?Page=${page}&PageSize=100`,
         { signal },
       ),
-    ),
   )
   const brandsById = new Map(
     [firstResponse, ...remainingPages]
@@ -50,35 +53,71 @@ async function fetchBrands(signal?: AbortSignal) {
 }
 
 export function getBrands(signal?: AbortSignal) {
-  if (signal) return fetchBrands(signal)
-
-  brandsRequest ??= fetchBrands().finally(() => {
-    brandsRequest = undefined
+  return cachedQuery({
+    key: 'brands:list',
+    staleTimeMs: BRAND_LIST_STALE_TIME_MS,
+    signal,
+    queryFn: fetchBrands,
   })
+}
 
-  return brandsRequest
+export function getBrandCount(signal?: AbortSignal) {
+  return cachedQuery({
+    key: 'brands:count',
+    staleTimeMs: BRAND_COUNT_STALE_TIME_MS,
+    signal,
+    queryFn: async (querySignal) => {
+      const response = await authorizedRequest<BrandsResponse>(
+        '/api/admin/Brands?Page=1&PageSize=1',
+        { signal: querySignal },
+      )
+
+      return Array.isArray(response) ? response.length : response.totalCount
+    },
+  })
 }
 
 export function getBrand(id: string, signal?: AbortSignal) {
-  return authorizedRequest<Brand>(`/api/admin/Brands/${encodeURIComponent(id)}`, { signal })
+  return cachedQuery({
+    key: `brands:detail:${id.toLowerCase()}`,
+    staleTimeMs: BRAND_LIST_STALE_TIME_MS,
+    signal,
+    queryFn: (querySignal) => authorizedRequest<Brand>(
+      `/api/admin/Brands/${encodeURIComponent(id)}`,
+      { signal: querySignal },
+    ),
+  })
 }
 
-export function createBrand(name: string) {
-  return authorizedRequest<string>('/api/admin/Brands', {
+export function invalidateBrandQueries() {
+  invalidateQueryPrefix('brands:')
+}
+
+export async function createBrand(name: string) {
+  const id = await authorizedRequest<string>('/api/admin/Brands', {
     method: 'POST',
     body: JSON.stringify({ name }),
   })
+
+  invalidateBrandQueries()
+  return id
 }
 
-export function updateBrand(id: string, name: string) {
-  return authorizedRequest<void>(`/api/admin/Brands/${encodeURIComponent(id)}`, {
+export async function updateBrand(id: string, name: string) {
+  await authorizedRequest<void>(`/api/admin/Brands/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify({ name }),
   })
+
+  invalidateBrandQueries()
+  invalidateQueryPrefix('products:')
 }
 
-export function deleteBrand(id: string) {
-  return authorizedRequest<void>(`/api/admin/Brands/${encodeURIComponent(id)}`, {
+export async function deleteBrand(id: string) {
+  await authorizedRequest<void>(`/api/admin/Brands/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
+
+  invalidateBrandQueries()
+  invalidateQueryPrefix('products:')
 }
