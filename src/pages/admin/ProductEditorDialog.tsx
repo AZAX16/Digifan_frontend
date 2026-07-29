@@ -6,6 +6,7 @@ import { ApiError } from '../../api/client'
 import {
   createProduct,
   getProduct,
+  setProductInventory,
   updateProduct,
   type Product,
   type ProductInput,
@@ -16,6 +17,7 @@ import { toPersianDigits, toWesternDigits } from '../../utils/persianDigits'
 export type ProductEditorTarget =
   | { mode: 'create' }
   | { mode: 'edit'; product: Product }
+  | { mode: 'inventory'; product: Product }
 
 interface ProductEditorDialogProps {
   target: ProductEditorTarget
@@ -32,6 +34,8 @@ interface ProductForm {
   brandId: string
   price: string
   currency: string
+  stockQuantity: string
+  reorderPoint: string
 }
 
 const EMPTY_FORM: ProductForm = {
@@ -41,6 +45,8 @@ const EMPTY_FORM: ProductForm = {
   brandId: '',
   price: '',
   currency: 'IRR',
+  stockQuantity: '۰',
+  reorderPoint: '۰',
 }
 
 function getDisplayValue(value: string | null | undefined, fallback: string) {
@@ -69,6 +75,8 @@ function productToForm(product: Product): ProductForm {
     brandId: product.brandId,
     price: toPersianDigits(String(product.price)),
     currency: getDisplayValue(product.currency, 'IRR'),
+    stockQuantity: toPersianDigits(String(product.stockQuantity)),
+    reorderPoint: toPersianDigits(String(product.reorderPoint)),
   }
 }
 
@@ -83,6 +91,17 @@ function parsePrice(value: string) {
   return Number.isFinite(price) ? price : null
 }
 
+function parseInventoryValue(value: string) {
+  const normalizedValue = toWesternDigits(value).replace(/[٬,\s]/g, '')
+
+  if (!/^\d+$/.test(normalizedValue)) return null
+
+  const parsedValue = Number(normalizedValue)
+  return Number.isSafeInteger(parsedValue) && parsedValue <= 2_147_483_647
+    ? parsedValue
+    : null
+}
+
 export function ProductEditorDialog({
   target,
   categories,
@@ -91,10 +110,10 @@ export function ProductEditorDialog({
   onSaved,
 }: ProductEditorDialogProps) {
   const [form, setForm] = useState<ProductForm>(() =>
-    target.mode === 'edit' ? productToForm(target.product) : EMPTY_FORM,
+    target.mode === 'create' ? EMPTY_FORM : productToForm(target.product),
   )
   const [feedback, setFeedback] = useState<string | null>(null)
-  const [isLoadingDetails, setIsLoadingDetails] = useState(target.mode === 'edit')
+  const [isLoadingDetails, setIsLoadingDetails] = useState(target.mode !== 'create')
   const [isSaving, setIsSaving] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   const categoryOptions = useMemo(
@@ -107,7 +126,7 @@ export function ProductEditorDialog({
   )
 
   useEffect(() => {
-    if (target.mode !== 'edit') return
+    if (target.mode === 'create') return
 
     const abortController = new AbortController()
     let isActive = true
@@ -135,32 +154,45 @@ export function ProductEditorDialog({
     const name = form.name.trim()
     const description = form.description.trim()
     const price = parsePrice(form.price)
+    const stockQuantity = parseInventoryValue(form.stockQuantity)
+    const reorderPoint = parseInventoryValue(form.reorderPoint)
 
-    if (!name || !form.categoryId || !form.brandId) {
+    if (stockQuantity === null || reorderPoint === null) {
+      setFeedback('موجودی و نقطه سفارش باید عدد صحیح و نامنفی باشند.')
+      return
+    }
+
+    if (target.mode !== 'inventory' && (!name || !form.categoryId || !form.brandId)) {
       setFeedback('نام، دسته‌بندی و برند محصول الزامی هستند.')
       return
     }
 
-    if (price === null || price < 0 || price > Number.MAX_SAFE_INTEGER) {
+    if (target.mode !== 'inventory' && (price === null || price < 0 || price > Number.MAX_SAFE_INTEGER)) {
       setFeedback('قیمت معتبر وارد کنید.')
       return
-    }
-
-    const input: ProductInput = {
-      name,
-      description: description.length ? description : null,
-      categoryId: form.categoryId,
-      brandId: form.brandId,
-      price,
-      currency: form.currency,
     }
 
     setIsSaving(true)
     setFeedback(null)
 
     try {
-      if (target.mode === 'edit') await updateProduct(target.product.id, input)
-      else await createProduct(input)
+      if (target.mode === 'inventory') {
+        await setProductInventory(target.product.id, { stockQuantity, reorderPoint })
+      } else {
+        const input: ProductInput = {
+          name,
+          description: description.length ? description : null,
+          categoryId: form.categoryId,
+          brandId: form.brandId,
+          price: price!,
+          currency: form.currency,
+          stockQuantity,
+          reorderPoint,
+        }
+
+        if (target.mode === 'edit') await updateProduct(target.product.id, input)
+        else await createProduct(input)
+      }
 
       onSaved()
     } catch (error) {
@@ -250,9 +282,15 @@ export function ProductEditorDialog({
       >
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-border-soft pb-4">
           <div>
-            <p className="m-0 text-xs font-bold text-accent-500">مدیریت محتوای محصول</p>
+            <p className="m-0 text-xs font-bold text-accent-500">
+              {target.mode === 'inventory' ? 'مدیریت موجودی محصول' : 'مدیریت محتوای محصول'}
+            </p>
             <h2 id="product-editor-title" className="mb-0 mt-1 text-xl font-black text-brand-950">
-              {target.mode === 'edit' ? 'ویرایش محصول' : 'افزودن محصول'}
+              {target.mode === 'inventory'
+                ? `موجودی ${getDisplayValue(target.product.name, 'محصول')}`
+                : target.mode === 'edit'
+                  ? 'ویرایش محصول'
+                  : 'افزودن محصول'}
             </h2>
           </div>
           <Button disabled={isBusy} size="sm" variant="ghost" onClick={onClose}>
@@ -263,6 +301,8 @@ export function ProductEditorDialog({
         {feedback && <Alert className="mb-5" live title={feedback} variant="danger" />}
 
         <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
+          {target.mode !== 'inventory' && (
+            <>
           <Input
             required
             disabled={isBusy}
@@ -320,9 +360,39 @@ export function ProductEditorDialog({
               onChange={(currency) => setForm((current) => ({ ...current, currency }))}
             />
           </div>
+            </>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              required
+              disabled={isBusy}
+              inputMode="numeric"
+              label="تعداد موجودی"
+              placeholder="۰"
+              value={form.stockQuantity}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, stockQuantity: event.target.value }))
+              }
+            />
+            <Input
+              required
+              disabled={isBusy}
+              inputMode="numeric"
+              label="نقطه سفارش مجدد"
+              placeholder="۰"
+              value={form.reorderPoint}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, reorderPoint: event.target.value }))
+              }
+            />
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button loading={isSaving} type="submit">
-              {target.mode === 'edit' ? 'ذخیره تغییرات' : 'ساخت محصول'}
+              {target.mode === 'inventory'
+                ? 'ذخیره موجودی'
+                : target.mode === 'edit'
+                  ? 'ذخیره تغییرات'
+                  : 'ساخت محصول'}
             </Button>
             <Button disabled={isBusy} variant="outline" onClick={onClose}>
               انصراف

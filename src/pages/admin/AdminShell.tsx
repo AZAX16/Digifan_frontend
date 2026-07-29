@@ -24,6 +24,7 @@ import {
 import { ApiError } from '../../api/client'
 import { Alert, Button, Input } from '../../components/ui'
 import { cn } from '../../utils/cn'
+import { formatPhoneNumber } from '../../utils/phoneNumber'
 
 export type AdminSection = 'dashboard' | 'products' | 'categories' | 'support' | 'account'
 
@@ -66,10 +67,10 @@ function getErrorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : 'خطای پیش‌بینی‌نشده‌ای رخ داد.'
 }
 
-function getProfileEmail(profile: AdminProfile | null) {
-  const email = profile?.email?.trim()
+function getProfilePhoneNumber(profile: AdminProfile | null) {
+  const phoneNumber = formatPhoneNumber(profile?.phoneNumber)
 
-  return email?.length ? email : 'سطح دسترسی کامل'
+  return phoneNumber ?? 'سطح دسترسی کامل'
 }
 
 export function AdminShell({ activeSection, children, search }: AdminShellProps) {
@@ -218,7 +219,7 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
               <div className="hidden min-w-0 text-right sm:block">
                 <p className="m-0 text-sm font-bold text-[#191c1e]">مدیر سیستم</p>
                 <p className="mb-0 mt-0.5 max-w-40 truncate text-xs font-medium text-[#293647]" dir="ltr">
-                  {getProfileEmail(profile)}
+                  {getProfilePhoneNumber(profile)}
                 </p>
               </div>
               <Button

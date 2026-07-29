@@ -2,7 +2,7 @@ import { ApiError, apiRequest } from './client'
 import { clearQueryCache } from './queryCache'
 
 export interface AdminLoginRequest {
-  email: string
+  phoneNumber: string
   password: string
 }
 
@@ -33,7 +33,7 @@ export type AdminLoginOutcome =
 
 export interface AdminProfile {
   id: string
-  email: string | null
+  phoneNumber: string | null
   isActive: boolean
 }
 
@@ -330,12 +330,12 @@ export function getAdminProfile() {
   return profileRequest
 }
 
-export function changeAdminEmail(newEmail: string) {
-  return authorizedRequest<void>('/api/admin/account/change-email', {
+export function changeAdminPhoneNumber(newPhoneNumber: string) {
+  return authorizedRequest<void>('/api/admin/account/change-phone-number', {
     method: 'POST',
-    body: JSON.stringify({ newEmail }),
+    body: JSON.stringify({ newPhoneNumber }),
   }).then(() => {
-    if (cachedProfile) updateCachedProfile({ ...cachedProfile, email: newEmail })
+    if (cachedProfile) updateCachedProfile({ ...cachedProfile, phoneNumber: newPhoneNumber })
   })
 }
 

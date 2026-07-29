@@ -1,16 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import {
-  changeAdminEmail,
   changeAdminPassword,
+  changeAdminPhoneNumber,
   getAdminProfile,
   logoutAdmin,
+  subscribeToAdminProfile,
   type AdminProfile,
 } from '../../api/auth'
 import { ApiError } from '../../api/client'
+import { formatPhoneNumber, isValidPhoneNumber, normalizePhoneNumber } from '../../utils/phoneNumber'
 import { Alert, Button, Input, Surface } from '../ui'
 
-type PendingAction = 'email' | 'password' | 'logout' | null
+type PendingAction = 'phone' | 'password' | 'logout' | null
 
 interface Feedback {
   variant: 'success' | 'danger'
@@ -23,8 +25,9 @@ function getActionError(error: unknown) {
 
 export function AdminAccountPanel() {
   const [profile, setProfile] = useState<AdminProfile | null>(null)
+  const [isProfileLoading, setIsProfileLoading] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
+  const [newPhoneNumber, setNewPhoneNumber] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -32,6 +35,7 @@ export function AdminAccountPanel() {
 
   useEffect(() => {
     let isActive = true
+    const unsubscribe = subscribeToAdminProfile(setProfile)
 
     void getAdminProfile()
       .then((nextProfile) => {
@@ -40,26 +44,32 @@ export function AdminAccountPanel() {
       .catch((error: unknown) => {
         if (isActive) setFeedback({ variant: 'danger', title: getActionError(error) })
       })
+      .finally(() => {
+        if (isActive) setIsProfileLoading(false)
+      })
 
     return () => {
       isActive = false
+      unsubscribe()
     }
   }, [])
 
-  const handleEmailChange = async (event: FormEvent<HTMLFormElement>) => {
+  const handlePhoneNumberChange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const normalizedEmail = newEmail.trim()
+    const normalizedPhoneNumber = normalizePhoneNumber(newPhoneNumber)
 
-    setPendingAction('email')
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      setFeedback({ variant: 'danger', title: 'شماره موبایل معتبر وارد کنید.' })
+      return
+    }
+
+    setPendingAction('phone')
     setFeedback(null)
 
     try {
-      await changeAdminEmail(normalizedEmail)
-      setProfile((currentProfile) =>
-        currentProfile ? { ...currentProfile, email: normalizedEmail } : currentProfile,
-      )
-      setNewEmail('')
-      setFeedback({ variant: 'success', title: 'ایمیل مدیر تغییر کرد.' })
+      await changeAdminPhoneNumber(normalizedPhoneNumber)
+      setNewPhoneNumber('')
+      setFeedback({ variant: 'success', title: 'شماره موبایل مدیر تغییر کرد.' })
     } catch (error) {
       setFeedback({ variant: 'danger', title: getActionError(error) })
     } finally {
@@ -97,7 +107,7 @@ export function AdminAccountPanel() {
   }
 
   const isBusy = pendingAction !== null
-  const profileEmail = profile?.email?.trim()
+  const profilePhoneNumber = formatPhoneNumber(profile?.phoneNumber)
 
   return (
     <section className="mx-auto max-w-5xl px-4 pt-6 sm:px-6" dir="rtl">
@@ -105,8 +115,10 @@ export function AdminAccountPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="m-0 text-xs font-bold text-muted">مدیر واردشده</p>
-            <p className="mb-0 mt-1 font-black text-brand-950">
-              {profileEmail?.length ? profileEmail : 'در حال دریافت پروفایل…'}
+            <p className="mb-0 mt-1 font-black text-brand-950" dir={profilePhoneNumber ? 'ltr' : undefined}>
+              {isProfileLoading
+                ? 'در حال دریافت پروفایل…'
+                : profilePhoneNumber ?? 'شماره موبایل ثبت نشده است'}
             </p>
             {profile && (
               <p className="mb-0 mt-1 text-xs text-muted">
@@ -141,22 +153,23 @@ export function AdminAccountPanel() {
 
         {showSettings && (
           <div className="mt-5 grid gap-5 border-t border-border-soft pt-5 md:grid-cols-2">
-            <form className="grid content-start gap-3" onSubmit={(event) => void handleEmailChange(event)}>
-              <h2 className="m-0 text-sm font-black text-brand-950">تغییر ایمیل</h2>
+            <form className="grid content-start gap-3" onSubmit={(event) => void handlePhoneNumberChange(event)}>
+              <h2 className="m-0 text-sm font-black text-brand-950">تغییر شماره موبایل</h2>
               <Input
                 required
-                autoComplete="email"
+                autoComplete="tel"
                 dir="ltr"
                 disabled={isBusy}
-                label="ایمیل جدید"
-                normalizeDigits={false}
-                placeholder="new@example.com"
-                type="email"
-                value={newEmail}
-                onChange={(event) => setNewEmail(event.target.value)}
+                inputMode="tel"
+                label="شماره موبایل جدید"
+                maxLength={20}
+                placeholder="۰۹۱۲۱۲۳۴۵۶۷"
+                type="tel"
+                value={newPhoneNumber}
+                onChange={(event) => setNewPhoneNumber(event.target.value)}
               />
-              <Button loading={pendingAction === 'email'} size="sm" type="submit">
-                ذخیره ایمیل
+              <Button loading={pendingAction === 'phone'} size="sm" type="submit">
+                ذخیره شماره موبایل
               </Button>
             </form>
 

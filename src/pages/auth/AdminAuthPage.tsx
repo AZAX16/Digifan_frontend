@@ -13,6 +13,7 @@ import { Input } from '../../components/ui/Field'
 import { Surface } from '../../components/ui/Surface'
 
 import { toWesternDigits } from '../../utils/persianDigits'
+import { isValidPhoneNumber, normalizePhoneNumber } from '../../utils/phoneNumber'
 interface Feedback {
   variant: 'danger'
   title: string
@@ -23,7 +24,7 @@ function getActionError(error: unknown) {
 }
 
 export function AdminAuthPage() {
-  const [email, setEmail] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -32,11 +33,18 @@ export function AdminAuthPage() {
   const [challenge, setChallenge] = useState<AdminTwoFactorChallenge | null>(null)
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber)
+
+    if (!isValidPhoneNumber(normalizedPhoneNumber)) {
+      setFeedback({ variant: 'danger', title: 'شماره موبایل معتبر وارد کنید.' })
+      return
+    }
+
     setIsSubmitting(true)
     setFeedback(null)
 
     try {
-      const outcome = await loginAdmin({ email: email.trim(), password })
+      const outcome = await loginAdmin({ phoneNumber: normalizedPhoneNumber, password })
 
       if (outcome.status === 'two-factor-required') {
         setChallenge(outcome.challenge)
@@ -143,12 +151,13 @@ export function AdminAuthPage() {
                 autoComplete="username"
                 dir="ltr"
                 disabled={isSubmitting}
-                label="ایمیل"
-                normalizeDigits={false}
-                placeholder="admin@example.com"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                inputMode="tel"
+                label="شماره موبایل"
+                maxLength={20}
+                placeholder="۰۹۱۲۱۲۳۴۵۶۷"
+                type="tel"
+                value={phoneNumber}
+                onChange={(event) => setPhoneNumber(event.target.value)}
               />
               <Input
                 required
