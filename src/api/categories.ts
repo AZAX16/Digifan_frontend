@@ -1,4 +1,6 @@
 import { authorizedRequest } from './auth'
+import { fetchRemainingPages } from './pagination'
+import { cachedQuery, invalidateQueryPrefix } from './queryCache'
 
 export { ApiError } from './client'
 
@@ -24,7 +26,8 @@ interface CategoryPage {
 }
 
 type CategoriesResponse = Category[] | CategoryPage
-let categoriesRequest: Promise<Category[]> | undefined
+const CATEGORY_LIST_STALE_TIME_MS = 60_000
+const CATEGORY_COUNT_STALE_TIME_MS = 30_000
 
 function getCategoryItems(response: CategoriesResponse) {
   if (Array.isArray(response)) return response
@@ -34,19 +37,23 @@ function getCategoryItems(response: CategoriesResponse) {
 }
 
 async function fetchCategories(signal?: AbortSignal) {
-  const firstResponse = await authorizedRequest<CategoriesResponse>('/api/admin/Categories', {
-    signal,
-  })
+  const firstResponse = await authorizedRequest<CategoriesResponse>(
+    '/api/admin/Categories?Page=1&PageSize=100',
+    { signal },
+  )
   const firstPageItems = getCategoryItems(firstResponse)
 
   if (Array.isArray(firstResponse) || firstResponse.totalPages <= 1) return firstPageItems
 
-  const remainingPages = await Promise.all(
-    Array.from({ length: firstResponse.totalPages - 1 }, (_, index) =>
-      authorizedRequest<CategoriesResponse>(`/api/admin/Categories?page=${index + 2}`, {
+  const remainingPages = await fetchRemainingPages(
+    firstResponse.totalPages,
+    (page) =>
+      authorizedRequest<CategoriesResponse>(
+        `/api/admin/Categories?Page=${page}&PageSize=100`,
+        {
         signal,
-      }),
-    ),
+        },
+      ),
   )
   const categoriesById = new Map(
     [firstResponse, ...remainingPages]
@@ -58,37 +65,71 @@ async function fetchCategories(signal?: AbortSignal) {
 }
 
 export function getCategories(signal?: AbortSignal) {
-  if (signal) return fetchCategories(signal)
-
-  categoriesRequest ??= fetchCategories().finally(() => {
-    categoriesRequest = undefined
+  return cachedQuery({
+    key: 'categories:list',
+    staleTimeMs: CATEGORY_LIST_STALE_TIME_MS,
+    signal,
+    queryFn: fetchCategories,
   })
+}
 
-  return categoriesRequest
+export function getCategoryCount(signal?: AbortSignal) {
+  return cachedQuery({
+    key: 'categories:count',
+    staleTimeMs: CATEGORY_COUNT_STALE_TIME_MS,
+    signal,
+    queryFn: async (querySignal) => {
+      const response = await authorizedRequest<CategoriesResponse>(
+        '/api/admin/Categories?Page=1&PageSize=1',
+        { signal: querySignal },
+      )
+
+      return Array.isArray(response) ? response.length : response.totalCount
+    },
+  })
 }
 
 export function getCategory(id: string, signal?: AbortSignal) {
-  return authorizedRequest<Category>(`/api/admin/Categories/${encodeURIComponent(id)}`, {
+  return cachedQuery({
+    key: `categories:detail:${id.toLowerCase()}`,
+    staleTimeMs: CATEGORY_LIST_STALE_TIME_MS,
     signal,
+    queryFn: (querySignal) => authorizedRequest<Category>(
+      `/api/admin/Categories/${encodeURIComponent(id)}`,
+      { signal: querySignal },
+    ),
   })
 }
 
-export function createCategory(input: CategoryInput) {
-  return authorizedRequest<string>('/api/admin/Categories', {
+export function invalidateCategoryQueries() {
+  invalidateQueryPrefix('categories:')
+}
+
+export async function createCategory(input: CategoryInput) {
+  const id = await authorizedRequest<string>('/api/admin/Categories', {
     method: 'POST',
     body: JSON.stringify(input),
   })
+
+  invalidateCategoryQueries()
+  return id
 }
 
-export function updateCategory(id: string, input: CategoryInput) {
-  return authorizedRequest<void>(`/api/admin/Categories/${encodeURIComponent(id)}`, {
+export async function updateCategory(id: string, input: CategoryInput) {
+  await authorizedRequest<void>(`/api/admin/Categories/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(input),
   })
+
+  invalidateCategoryQueries()
+  invalidateQueryPrefix('products:')
 }
 
-export function deleteCategory(id: string) {
-  return authorizedRequest<void>(`/api/admin/Categories/${encodeURIComponent(id)}`, {
+export async function deleteCategory(id: string) {
+  await authorizedRequest<void>(`/api/admin/Categories/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
+
+  invalidateCategoryQueries()
+  invalidateQueryPrefix('products:')
 }

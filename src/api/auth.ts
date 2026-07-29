@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from './client'
+import { clearQueryCache } from './queryCache'
 
 export interface AdminLoginRequest {
   email: string
@@ -49,11 +50,13 @@ interface ActiveSession extends RefreshSession {
 const STORAGE_KEY = 'digifan.admin.refresh-session.v1'
 const ACCESS_TOKEN_LEEWAY_MS = 15_000
 const sessionListeners = new Set<() => void>()
+const profileListeners = new Set<(profile: AdminProfile | null) => void>()
 
 let activeSession: ActiveSession | null = null
 let refreshRequest: Promise<ActiveSession> | undefined
 let restoreRequest: Promise<boolean> | undefined
 let profileRequest: Promise<AdminProfile> | undefined
+let cachedProfile: AdminProfile | undefined
 
 function isFutureDate(value: string | null | undefined, leewayMs = 0) {
   if (!value) return false
@@ -106,9 +109,16 @@ function notifySessionListeners() {
   sessionListeners.forEach((listener) => listener())
 }
 
+function updateCachedProfile(profile: AdminProfile | undefined) {
+  cachedProfile = profile
+  profileListeners.forEach((listener) => listener(profile ?? null))
+}
+
 function clearSession() {
   activeSession = null
   profileRequest = undefined
+  updateCachedProfile(undefined)
+  clearQueryCache()
   storeRefreshSession(null)
   notifySessionListeners()
 }
@@ -169,8 +179,21 @@ export function subscribeToAdminSession(listener: () => void) {
   return () => sessionListeners.delete(listener)
 }
 
+export function subscribeToAdminProfile(listener: (profile: AdminProfile | null) => void) {
+  profileListeners.add(listener)
+
+  return () => profileListeners.delete(listener)
+}
+
 export function hasActiveAdminSession() {
-  return activeSession !== null
+  return activeSession !== null && isFutureDate(activeSession.refreshTokenExpiresAt)
+}
+
+export function getActiveAdminSessionExpiresAt() {
+  if (!activeSession || !isFutureDate(activeSession.refreshTokenExpiresAt)) return null
+
+  const expiresAt = Date.parse(activeSession.refreshTokenExpiresAt)
+  return Number.isFinite(expiresAt) ? expiresAt : null
 }
 
 export function hasStoredAdminSession() {
@@ -247,7 +270,11 @@ export function refreshAdminSession() {
 }
 
 export function restoreAdminSession() {
-  if (activeSession) return Promise.resolve(true)
+  if (hasActiveAdminSession()) return Promise.resolve(true)
+  if (activeSession) {
+    clearSession()
+    return Promise.resolve(false)
+  }
   if (!hasStoredAdminSession()) return Promise.resolve(false)
   if (restoreRequest) return restoreRequest
 
@@ -289,9 +316,16 @@ export async function authorizedRequest<T>(path: string, init: RequestInit = {})
 }
 
 export function getAdminProfile() {
-  profileRequest ??= authorizedRequest<AdminProfile>('/api/admin/account/profile').finally(() => {
-    profileRequest = undefined
-  })
+  if (cachedProfile) return Promise.resolve(cachedProfile)
+
+  profileRequest ??= authorizedRequest<AdminProfile>('/api/admin/account/profile')
+    .then((profile) => {
+      updateCachedProfile(profile)
+      return profile
+    })
+    .finally(() => {
+      profileRequest = undefined
+    })
 
   return profileRequest
 }
@@ -300,6 +334,8 @@ export function changeAdminEmail(newEmail: string) {
   return authorizedRequest<void>('/api/admin/account/change-email', {
     method: 'POST',
     body: JSON.stringify({ newEmail }),
+  }).then(() => {
+    if (cachedProfile) updateCachedProfile({ ...cachedProfile, email: newEmail })
   })
 }
 
@@ -311,17 +347,19 @@ export function changeAdminPassword(currentPassword: string, newPassword: string
 }
 
 export async function logoutAdmin() {
-  try {
-    const accessToken = await getAccessToken()
-    const refreshSession = getRefreshSession()
+  const accessToken = activeSession?.accessToken
+  const refreshSession = getRefreshSession()
 
-    if (refreshSession) {
-      await apiRequest<void>('/api/auth/admin/logout', withAccessToken({
-        method: 'POST',
-        body: JSON.stringify({ refreshToken: refreshSession.refreshToken }),
-      }, accessToken))
-    }
-  } finally {
-    clearSession()
+  clearSession()
+
+  if (!accessToken || !refreshSession) return
+
+  try {
+    await apiRequest<void>('/api/auth/admin/logout', withAccessToken({
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: refreshSession.refreshToken }),
+    }, accessToken))
+  } catch {
+    // Local logout must succeed even when server-side token revocation is unavailable.
   }
 }

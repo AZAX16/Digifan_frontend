@@ -159,7 +159,7 @@ export function Dropdown({
           role="listbox"
           aria-label={label ?? 'گزینه‌ها'}
           tabIndex={-1}
-          className="absolute inset-x-0 top-full z-40 mt-1 overflow-hidden rounded-df-md border border-border-soft bg-white p-1 shadow-raised"
+          className="absolute inset-x-0 top-full z-40 mt-1 max-h-72 overflow-y-auto overscroll-contain rounded-df-md border border-border-soft bg-white p-1 shadow-raised"
         >
           {options.map((option, index) => {
             const selected = option.value === value

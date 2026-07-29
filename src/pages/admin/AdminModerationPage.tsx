@@ -260,19 +260,10 @@ export function AdminModerationPage() {
       if (action === 'duplicate') await duplicateProduct(product.id)
       if (action === 'delete') await deleteProduct(product.id)
 
-      if (action === 'publish' || action === 'unpublish' || action === 'archive') {
-        const nextStatus = action === 'publish' ? 'active' : action === 'archive' ? 'archived' : 'inactive'
-        setProductsPage((currentPage) => ({
-          ...currentPage,
-          items: currentPage.items.map((currentProduct) =>
-            currentProduct.id === product.id
-              ? { ...currentProduct, status: nextStatus }
-              : currentProduct,
-          ),
-        }))
-      } else {
-        setRefreshKey((currentKey) => currentKey + 1)
+      if (action === 'delete' && productsPage.items.length === 1 && page > 1) {
+        setPage((currentPage) => Math.max(1, currentPage - 1))
       }
+      setRefreshKey((currentKey) => currentKey + 1)
 
       const actionMessage: Record<ProductAction, string> = {
         publish: 'محصول منتشر شد.',
@@ -303,7 +294,7 @@ export function AdminModerationPage() {
         onSubmit: handleSearch,
       }}
     >
-      <main className="p-4 sm:p-6 lg:p-10">
+      <main className="p-3 sm:p-6 xl:p-10">
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="m-0 text-xs font-bold text-accent-500">پنل مدیریت محتوا</p>
@@ -315,6 +306,7 @@ export function AdminModerationPage() {
                 </p>
               </div>
               <Button
+                className="w-full sm:w-auto"
                 disabled={isLoadingOptions || categories.length === 0 || brands.length === 0}
                 variant="secondary"
                 onClick={() => setEditorTarget({ mode: 'create' })}
@@ -336,9 +328,11 @@ export function AdminModerationPage() {
                     {statusOptions.map((option) => (
                       <Checkbox
                         key={option.value.length ? option.value : 'all'}
+                        name="product-status"
                         checked={status === option.value}
                         disabled={isLoading}
                         label={option.label}
+                        type="radio"
                         onChange={() => {
                           setStatus(option.value)
                           setPage(1)
@@ -383,7 +377,7 @@ export function AdminModerationPage() {
               </Surface>
 
               <section aria-labelledby="products-heading" className="min-w-0">
-                <Surface elevation="flat" padding="md">
+                <Surface className="min-w-0 !p-3 sm:!p-5" elevation="flat" padding="md">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft pb-4">
                     <div>
                       <h2 id="products-heading" className="m-0 text-lg font-black text-brand-950">
@@ -424,7 +418,7 @@ export function AdminModerationPage() {
                         const description = product.description?.trim()
 
                         return (
-                          <article key={product.id} className="rounded-df-md border border-border-soft bg-white p-4 shadow-sm">
+                          <article key={product.id} className="min-w-0 rounded-df-md border border-border-soft bg-white p-3 shadow-sm sm:p-4">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -433,7 +427,7 @@ export function AdminModerationPage() {
                                   <span aria-hidden="true" className="size-1 rounded-full bg-border" />
                                   <span className="text-xs text-muted">{getDisplayValue(product.brandName, 'بدون برند')}</span>
                                 </div>
-                                <h3 className="mb-0 mt-3 truncate text-lg font-black text-brand-950">
+                                <h3 className="mb-0 mt-3 break-words text-lg font-black text-brand-950 sm:truncate">
                                   {getProductName(product)}
                                 </h3>
                                 <p className="mb-0 mt-1 line-clamp-2 text-sm leading-6 text-muted">
@@ -442,12 +436,13 @@ export function AdminModerationPage() {
                                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
                                   <span>قیمت: <strong className="text-ink">{priceFormatter.format(product.price)} {product.currency ?? ''}</strong></span>
                                   <span>ساخته‌شده: {formatProductDate(product.createdAt)}</span>
-                                  {product.slug?.trim() && <span dir="ltr">/{product.slug}</span>}
+                                  {product.slug?.trim() && <span className="break-all" dir="ltr">/{product.slug}</span>}
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2 border-t border-border-soft pt-3">
+                            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border-soft pt-3 sm:flex sm:flex-wrap">
                               <Button
+                                className="w-full sm:w-auto"
                                 disabled={isProductBusy}
                                 size="sm"
                                 variant="outline"
@@ -457,6 +452,7 @@ export function AdminModerationPage() {
                               </Button>
                               {isStatus(product, 'active') ? (
                                 <Button
+                                  className="w-full sm:w-auto"
                                   disabled={isProductBusy}
                                   loading={isPending && pendingAction === 'unpublish'}
                                   size="sm"
@@ -467,6 +463,7 @@ export function AdminModerationPage() {
                                 </Button>
                               ) : !isStatus(product, 'archived') && !isStatus(product, 'discontinued') && (
                                 <Button
+                                  className="w-full sm:w-auto"
                                   disabled={isProductBusy}
                                   loading={isPending && pendingAction === 'publish'}
                                   size="sm"
@@ -477,6 +474,7 @@ export function AdminModerationPage() {
                               )}
                               {!isStatus(product, 'archived') && (
                                 <Button
+                                  className="w-full sm:w-auto"
                                   disabled={isProductBusy}
                                   loading={isPending && pendingAction === 'archive'}
                                   size="sm"
@@ -487,6 +485,7 @@ export function AdminModerationPage() {
                                 </Button>
                               )}
                               <Button
+                                className="w-full sm:w-auto"
                                 disabled={isProductBusy}
                                 loading={isPending && pendingAction === 'duplicate'}
                                 size="sm"
@@ -496,6 +495,7 @@ export function AdminModerationPage() {
                                 تکثیر
                               </Button>
                               <Button
+                                className="w-full sm:w-auto"
                                 disabled={isProductBusy}
                                 loading={isPending && pendingAction === 'delete'}
                                 size="sm"
@@ -514,7 +514,7 @@ export function AdminModerationPage() {
 
                 {productsPage.totalPages > 1 && (
                   <Pagination
-                    className="mt-5 justify-center"
+                    className="mt-5"
                     page={page}
                     pageCount={productsPage.totalPages}
                     onPageChange={setPage}

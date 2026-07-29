@@ -7,6 +7,7 @@ import {
 
 import {
   hasActiveAdminSession,
+  getActiveAdminSessionExpiresAt,
   hasStoredAdminSession,
   restoreAdminSession,
   subscribeToAdminSession,
@@ -24,9 +25,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isActive = true
+    let expirationTimer: ReturnType<typeof setTimeout> | undefined
     const updateStatus = () => {
       if (isActive) {
-        setStatus(hasActiveAdminSession() ? 'authenticated' : 'anonymous')
+        const isAuthenticated = hasActiveAdminSession()
+        setStatus(isAuthenticated ? 'authenticated' : 'anonymous')
+        clearTimeout(expirationTimer)
+
+        const expiresAt = isAuthenticated ? getActiveAdminSessionExpiresAt() : null
+        if (expiresAt) {
+          expirationTimer = setTimeout(
+            updateStatus,
+            Math.min(Math.max(0, expiresAt - Date.now()), 2_147_483_647),
+          )
+        }
       }
     }
     const unsubscribe = subscribeToAdminSession(updateStatus)
@@ -35,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isActive = false
+      clearTimeout(expirationTimer)
       unsubscribe()
     }
   }, [])

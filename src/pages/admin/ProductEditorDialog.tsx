@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { Brand } from '../../api/brands'
 import type { Category } from '../../api/categories'
@@ -77,7 +77,10 @@ function parsePrice(value: string) {
     .replace(/[٬,\s]/g, '')
     .replace('٫', '.')
 
-  return Number(normalizedValue)
+  if (!normalizedValue) return null
+
+  const price = Number(normalizedValue)
+  return Number.isFinite(price) ? price : null
 }
 
 export function ProductEditorDialog({
@@ -93,6 +96,7 @@ export function ProductEditorDialog({
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(target.mode === 'edit')
   const [isSaving, setIsSaving] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const categoryOptions = useMemo(
     () => categories.map((category) => ({ value: category.id, label: getCategoryLabel(category) })),
     [categories],
@@ -137,7 +141,7 @@ export function ProductEditorDialog({
       return
     }
 
-    if (!Number.isFinite(price) || price < 0) {
+    if (price === null || price < 0 || price > Number.MAX_SAFE_INTEGER) {
       setFeedback('قیمت معتبر وارد کنید.')
       return
     }
@@ -166,10 +170,77 @@ export function ProductEditorDialog({
   }
 
   const isBusy = isLoadingDetails || isSaving
+  const isBusyRef = useRef(isBusy)
+
+  useEffect(() => {
+    isBusyRef.current = isBusy
+  }, [isBusy])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const previousBodyOverflow = document.body.style.overflow
+    const focusableSelector = [
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',')
+
+    document.body.style.overflow = 'hidden'
+    const focusFrame = requestAnimationFrame(() => {
+      dialog?.querySelector<HTMLElement>(focusableSelector)?.focus()
+      if (!dialog?.contains(document.activeElement)) dialog?.focus()
+    })
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (!isBusyRef.current) onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !dialog) return
+
+      const focusableElements = [...dialog.querySelectorAll<HTMLElement>(focusableSelector)]
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements.at(-1)
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement?.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement?.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousBodyOverflow
+      previouslyFocused?.focus()
+    }
+  }, [onClose])
+
+  useEffect(() => {
+    if (!isBusy && document.activeElement === dialogRef.current) {
+      dialogRef.current?.querySelector<HTMLInputElement>('input:not([disabled])')?.focus()
+    }
+  }, [isBusy])
 
   return (
     <div className="fixed inset-0 z-[80] overflow-y-auto bg-brand-950/45 px-4 py-8 backdrop-blur-sm" dir="rtl">
       <Surface
+        ref={dialogRef}
+        tabIndex={-1}
         aria-labelledby="product-editor-title"
         className="mx-auto max-w-2xl"
         elevation="raised"

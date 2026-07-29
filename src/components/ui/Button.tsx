@@ -24,7 +24,7 @@ const variants: Record<ButtonVariant, string> = {
   primary:
     'bg-brand-950 text-white shadow-[0_4px_10px_rgba(32,56,72,0.28)] hover:-translate-y-0.5 hover:bg-[#31566e] active:translate-y-[0.5px]',
   secondary:
-    'bg-accent-500 text-white shadow-[0_4px_10px_rgba(255,132,26,0.28)] hover:-translate-y-0.5 hover:bg-[#e97812] active:translate-y-[0.5px]',
+    'bg-accent-500 text-brand-950 shadow-[0_4px_10px_rgba(255,132,26,0.28)] hover:-translate-y-0.5 hover:bg-[#ff9d45] active:translate-y-[0.5px]',
   outline:
     'border border-border bg-white text-brand-950 shadow-[0_3px_8px_rgba(32,56,72,0.12)] hover:-translate-y-0.5 hover:border-brand-950 hover:bg-brand-950/5 active:translate-y-[0.5px]',
   ghost:

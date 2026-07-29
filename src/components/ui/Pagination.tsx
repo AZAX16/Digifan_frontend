@@ -59,7 +59,10 @@ export function Pagination({
   const items = getPaginationItems(safePage, safePageCount)
 
   return (
-    <nav aria-label="صفحه‌بندی" className={cn('flex items-center gap-2', className)}>
+    <nav
+      aria-label="صفحه‌بندی"
+      className={cn('flex max-w-full flex-wrap items-center justify-center gap-1.5 sm:gap-2', className)}
+    >
       <button
         type="button"
         disabled={safePage <= 1}
@@ -87,7 +90,7 @@ export function Pagination({
             className={cn(
               'size-9 cursor-pointer rounded-df-sm border text-sm shadow-sm transition-[background-color,border-color,color,opacity,transform] duration-200 ease-out hover:-translate-y-0.5 active:translate-y-[0.5px]',
               item === safePage
-                ? 'border-accent-500 bg-accent-500 text-white hover:border-[#e97812] hover:bg-[#e97812]'
+                ? 'border-accent-500 bg-accent-500 text-brand-950 hover:border-[#ff9d45] hover:bg-[#ff9d45]'
                 : 'border-border-soft bg-white text-brand-950 hover:border-brand-950',
             )}
             onClick={() => onPageChange?.(item)}

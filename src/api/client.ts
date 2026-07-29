@@ -1,5 +1,7 @@
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const apiBaseUrl = (configuredApiBaseUrl?.length ? configuredApiBaseUrl : '').replace(/\/+$/, '')
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+const MAX_ERROR_BODY_LENGTH = 400
 
 interface ProblemDetails {
   title?: string | null
@@ -25,6 +27,32 @@ function parseJson(value: string) {
   }
 }
 
+function createRequestSignal(callerSignal: AbortSignal | null | undefined) {
+  const controller = new AbortController()
+  let didTimeout = false
+  const forwardCallerAbort = () => controller.abort(callerSignal?.reason)
+
+  if (callerSignal?.aborted) {
+    forwardCallerAbort()
+  } else {
+    callerSignal?.addEventListener('abort', forwardCallerAbort, { once: true })
+  }
+
+  const timeoutId = setTimeout(() => {
+    didTimeout = true
+    controller.abort()
+  }, DEFAULT_REQUEST_TIMEOUT_MS)
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => didTimeout,
+    cleanup: () => {
+      clearTimeout(timeoutId)
+      callerSignal?.removeEventListener('abort', forwardCallerAbort)
+    },
+  }
+}
+
 function getErrorMessage(status: number, body: string, contentType: string) {
   const fallback = `درخواست با خطای ${status} روبه‌رو شد.`
 
@@ -43,7 +71,13 @@ function getErrorMessage(status: number, body: string, contentType: string) {
     return problemMessage ?? fallback
   }
 
-  return body.trim()
+  if (!contentType.includes('text/plain')) return fallback
+
+  const plainMessage = body.trim().replace(/\s+/g, ' ')
+
+  return plainMessage.length > MAX_ERROR_BODY_LENGTH
+    ? `${plainMessage.slice(0, MAX_ERROR_BODY_LENGTH)}…`
+    : plainMessage
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}) {
@@ -54,23 +88,33 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}) {
     headers.set('Content-Type', 'application/json')
   }
 
+  const requestSignal = createRequestSignal(init.signal)
   let response: Response
+  let body: string
 
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       headers,
+      signal: requestSignal.signal,
     })
+    body = response.status === 204 ? '' : await response.text()
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    if (requestSignal.didTimeout()) {
+      throw new ApiError(408, 'زمان انتظار برای پاسخ سرور به پایان رسید. دوباره تلاش کنید.')
+    }
+    if (init.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+      throw error
+    }
 
     throw new ApiError(
       0,
       'ارتباط با سرور برقرار نشد. اتصال اینترنت یا تنظیمات پراکسی API را بررسی کنید.',
     )
+  } finally {
+    requestSignal.cleanup()
   }
 
-  const body = response.status === 204 ? '' : await response.text()
   const contentType = response.headers.get('content-type') ?? ''
 
   if (!response.ok) {
@@ -82,7 +126,11 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}) {
   if (contentType.includes('json')) {
     const parsedBody = parseJson(body)
 
-    if (parsedBody !== undefined) return parsedBody as T
+    if (parsedBody === undefined) {
+      throw new ApiError(502, 'پاسخ JSON سرور معتبر نبود. دوباره تلاش کنید.')
+    }
+
+    return parsedBody as T
   }
 
   return body as T

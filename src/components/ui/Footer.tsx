@@ -21,7 +21,7 @@ const defaultColumns: FooterColumn[] = [
       'محصولات محبوب',
       'محصولات تخفیف‌دار',
       'محصولات با ارسال رایگان',
-    ].map((label) => ({ label, href: '#' })),
+    ].map((label) => ({ label, href: '#/ui-kit' })),
   },
   {
     title: 'اطلاعات',
@@ -32,7 +32,7 @@ const defaultColumns: FooterColumn[] = [
       'روش‌های پرداخت',
       'روش‌های ارسال',
       'رویه‌های بازگرداندن کالا',
-    ].map((label) => ({ label, href: '#' })),
+    ].map((label) => ({ label, href: '#/ui-kit' })),
   },
 ]
 

@@ -7,7 +7,10 @@ import {
   type AdminTwoFactorChallenge,
 } from '../../api/auth'
 import { ApiError } from '../../api/client'
-import { Alert, Button, Input, Surface } from '../../components/ui'
+import { Alert } from '../../components/ui/Alert'
+import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Field'
+import { Surface } from '../../components/ui/Surface'
 
 import { toWesternDigits } from '../../utils/persianDigits'
 interface Feedback {
