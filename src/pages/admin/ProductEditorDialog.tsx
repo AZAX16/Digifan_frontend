@@ -6,18 +6,18 @@ import { ApiError } from '../../api/client'
 import {
   createProduct,
   getProduct,
-  setProductInventory,
   updateProduct,
+  type CreateProductInput,
   type Product,
-  type ProductInput,
+  type ProductMetadataInput,
 } from '../../api/products'
 import { Alert, Button, Dropdown, Input, Surface, Textarea } from '../../components/ui'
-import { toPersianDigits, toWesternDigits } from '../../utils/persianDigits'
+import { parseNonNegativeInt32, parseNonNegativePrice } from '../../utils/numericInput'
+import { toPersianDigits } from '../../utils/persianDigits'
 
 export type ProductEditorTarget =
   | { mode: 'create' }
   | { mode: 'edit'; product: Product }
-  | { mode: 'inventory'; product: Product }
 
 interface ProductEditorDialogProps {
   target: ProductEditorTarget
@@ -33,7 +33,6 @@ interface ProductForm {
   categoryId: string
   brandId: string
   price: string
-  currency: string
   stockQuantity: string
   reorderPoint: string
 }
@@ -44,7 +43,6 @@ const EMPTY_FORM: ProductForm = {
   categoryId: '',
   brandId: '',
   price: '',
-  currency: 'IRR',
   stockQuantity: '۰',
   reorderPoint: '۰',
 }
@@ -74,32 +72,9 @@ function productToForm(product: Product): ProductForm {
     categoryId: product.categoryId,
     brandId: product.brandId,
     price: toPersianDigits(String(product.price)),
-    currency: getDisplayValue(product.currency, 'IRR'),
     stockQuantity: toPersianDigits(String(product.stockQuantity)),
     reorderPoint: toPersianDigits(String(product.reorderPoint)),
   }
-}
-
-function parsePrice(value: string) {
-  const normalizedValue = toWesternDigits(value)
-    .replace(/[٬,\s]/g, '')
-    .replace('٫', '.')
-
-  if (!normalizedValue) return null
-
-  const price = Number(normalizedValue)
-  return Number.isFinite(price) ? price : null
-}
-
-function parseInventoryValue(value: string) {
-  const normalizedValue = toWesternDigits(value).replace(/[٬,\s]/g, '')
-
-  if (!/^\d+$/.test(normalizedValue)) return null
-
-  const parsedValue = Number(normalizedValue)
-  return Number.isSafeInteger(parsedValue) && parsedValue <= 2_147_483_647
-    ? parsedValue
-    : null
 }
 
 export function ProductEditorDialog({
@@ -153,45 +128,49 @@ export function ProductEditorDialog({
     event.preventDefault()
     const name = form.name.trim()
     const description = form.description.trim()
-    const price = parsePrice(form.price)
-    const stockQuantity = parseInventoryValue(form.stockQuantity)
-    const reorderPoint = parseInventoryValue(form.reorderPoint)
-
-    if (stockQuantity === null || reorderPoint === null) {
-      setFeedback('موجودی و نقطه سفارش باید عدد صحیح و نامنفی باشند.')
-      return
-    }
-
-    if (target.mode !== 'inventory' && (!name || !form.categoryId || !form.brandId)) {
+    if (!name || !form.categoryId || !form.brandId) {
       setFeedback('نام، دسته‌بندی و برند محصول الزامی هستند.')
       return
     }
 
-    if (target.mode !== 'inventory' && (price === null || price < 0 || price > Number.MAX_SAFE_INTEGER)) {
-      setFeedback('قیمت معتبر وارد کنید.')
-      return
+    const metadataInput: ProductMetadataInput = {
+      name,
+      description: description.length ? description : null,
+      categoryId: form.categoryId,
+      brandId: form.brandId,
     }
 
     setIsSaving(true)
     setFeedback(null)
 
     try {
-      if (target.mode === 'inventory') {
-        await setProductInventory(target.product.id, { stockQuantity, reorderPoint })
+      if (target.mode === 'edit') {
+        await updateProduct(target.product.id, metadataInput)
       } else {
-        const input: ProductInput = {
-          name,
-          description: description.length ? description : null,
-          categoryId: form.categoryId,
-          brandId: form.brandId,
-          price: price!,
-          currency: form.currency,
+        const price = parseNonNegativePrice(form.price)
+        const stockQuantity = parseNonNegativeInt32(form.stockQuantity)
+        const reorderPoint = parseNonNegativeInt32(form.reorderPoint)
+
+        if (price === null) {
+          setFeedback('قیمت معتبر وارد کنید.')
+          setIsSaving(false)
+          return
+        }
+        if (stockQuantity === null || reorderPoint === null) {
+          setFeedback('موجودی و نقطه سفارش باید عدد صحیح و نامنفی باشند.')
+          setIsSaving(false)
+          return
+        }
+
+        const input: CreateProductInput = {
+          ...metadataInput,
+          price,
+          currency: 'تومان',
           stockQuantity,
           reorderPoint,
         }
 
-        if (target.mode === 'edit') await updateProduct(target.product.id, input)
-        else await createProduct(input)
+        await createProduct(input)
       }
 
       onSaved()
@@ -283,14 +262,10 @@ export function ProductEditorDialog({
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-border-soft pb-4">
           <div>
             <p className="m-0 text-xs font-bold text-accent-500">
-              {target.mode === 'inventory' ? 'مدیریت موجودی محصول' : 'مدیریت محتوای محصول'}
+              مدیریت محتوای محصول
             </p>
             <h2 id="product-editor-title" className="mb-0 mt-1 text-xl font-black text-brand-950">
-              {target.mode === 'inventory'
-                ? `موجودی ${getDisplayValue(target.product.name, 'محصول')}`
-                : target.mode === 'edit'
-                  ? 'ویرایش محصول'
-                  : 'افزودن محصول'}
+              {target.mode === 'edit' ? 'ویرایش محصول' : 'افزودن محصول'}
             </h2>
           </div>
           <Button disabled={isBusy} size="sm" variant="ghost" onClick={onClose}>
@@ -300,9 +275,14 @@ export function ProductEditorDialog({
 
         {feedback && <Alert className="mb-5" live title={feedback} variant="danger" />}
 
+        {target.mode === 'edit' && (
+          <Alert className="mb-5" title="ویرایش مطابق قرارداد جدید API" variant="info">
+            در حال حاضر فقط نام، توضیحات، دسته‌بندی و برند قابل ویرایش هستند. قیمت و موجودی
+            مدل‌ها را از بخش «تنوع‌ها و تصاویر» همان محصول مدیریت کنید.
+          </Alert>
+        )}
+
         <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
-          {target.mode !== 'inventory' && (
-            <>
           <Input
             required
             disabled={isBusy}
@@ -338,30 +318,17 @@ export function ProductEditorDialog({
               onChange={(brandId) => setForm((current) => ({ ...current, brandId }))}
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          {target.mode === 'create' && (
+            <>
             <Input
               required
               disabled={isBusy}
               inputMode="decimal"
-              label="قیمت"
+              label="قیمت (تومان)"
               placeholder="۰"
               value={form.price}
               onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
             />
-            <Dropdown
-              disabled={isBusy}
-              label="واحد پول"
-              options={[
-                { value: 'IRR', label: 'ریال (IRR)' },
-                { value: 'TOMAN', label: 'تومان' },
-                { value: 'USD', label: 'دلار (USD)' },
-              ]}
-              value={form.currency}
-              onChange={(currency) => setForm((current) => ({ ...current, currency }))}
-            />
-          </div>
-            </>
-          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
               required
@@ -386,13 +353,11 @@ export function ProductEditorDialog({
               }
             />
           </div>
+            </>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button loading={isSaving} type="submit">
-              {target.mode === 'inventory'
-                ? 'ذخیره موجودی'
-                : target.mode === 'edit'
-                  ? 'ذخیره تغییرات'
-                  : 'ساخت محصول'}
+              {target.mode === 'edit' ? 'ذخیره تغییرات' : 'ساخت محصول'}
             </Button>
             <Button disabled={isBusy} variant="outline" onClick={onClose}>
               انصراف

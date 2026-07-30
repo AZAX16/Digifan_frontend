@@ -21,11 +21,35 @@ export interface StorefrontProductListItem {
   brandSlug: string | null
   price: number
   currency: string | null
+  primaryImageUrl: string | null
+}
+
+export interface StorefrontProductVariant {
+  id: string
+  name: string | null
+  sku: string | null
+  price: number
+  currency: string | null
+  stockQuantity: number
+  attributes: Record<string, string> | null
+}
+
+export interface StorefrontProductImage {
+  id: string
+  url: string | null
+  altText: string | null
+  displayOrder: number
+  isPrimary: boolean
+  variantId: string | null
 }
 
 export interface StorefrontProductDetails
-  extends Omit<StorefrontProductListItem, 'summary'> {
+  extends Omit<StorefrontProductListItem, 'summary' | 'primaryImageUrl'> {
   description: string | null
+  averageRating: number
+  reviewCount: number
+  variants: StorefrontProductVariant[] | null
+  images: StorefrontProductImage[] | null
 }
 
 export interface StorefrontProductQuery {

@@ -12,10 +12,13 @@ import {
 } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 
+import { useAuth } from '../../components/auth/authContext'
+import { ADMIN_PERMISSIONS, hasAdminPermission } from '../../components/auth/adminPermissions'
 import { Alert, Badge, Button, Surface, Textarea, type BadgeVariant } from '../../components/ui'
 import { cn } from '../../utils/cn'
 import { toPersianDigits } from '../../utils/persianDigits'
 import { AdminShell } from './AdminShell'
+import { AdminReviewsPanel } from './AdminReviewsPanel'
 
 type TicketStatus = 'open' | 'waiting' | 'resolved'
 type TicketFilter = 'all' | TicketStatus
@@ -112,11 +115,17 @@ function getStatusDetails(status: TicketStatus): { label: string; variant: Badge
 }
 
 export function AdminSupportPage() {
+  const { profile } = useAuth()
+  const canViewReviews = hasAdminPermission(profile, ADMIN_PERMISSIONS.viewReviewReports)
+  const [requestedWorkspace, setRequestedWorkspace] = useState<'tickets' | 'reviews'>('tickets')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [selectedTicketId, setSelectedTicketId] = useState(supportTickets[0].id)
   const [reply, setReply] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const activeWorkspace = requestedWorkspace === 'reviews' && canViewReviews
+    ? 'reviews'
+    : 'tickets'
 
   const filteredTickets = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('fa')
@@ -149,26 +158,69 @@ export function AdminSupportPage() {
   return (
     <AdminShell
       activeSection="support"
-      search={{
-        value: query,
-        placeholder: 'جستجو در تیکت‌ها…',
-        onChange: setQuery,
-        onSubmit: setQuery,
-      }}
+      search={activeWorkspace === 'tickets'
+        ? {
+            value: query,
+            placeholder: 'جستجو در تیکت‌ها…',
+            onChange: setQuery,
+            onSubmit: setQuery,
+          }
+        : {
+            value: '',
+            disabled: true,
+            placeholder: 'جستجوی نظرات در API ارائه نشده است',
+            onChange: () => undefined,
+            onSubmit: () => undefined,
+          }}
     >
       <main className="px-4 pb-10 pt-5 sm:px-6 lg:px-10">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="m-0 text-2xl font-bold text-[#191c1e]">مرکز پشتیبانی</h1>
-              <Badge variant="neutral">نسخه نمایشی</Badge>
+              <Badge variant={activeWorkspace === 'tickets' ? 'neutral' : 'success'}>
+                {activeWorkspace === 'tickets' ? 'تیکت نمایشی' : 'نظرات API زنده'}
+              </Badge>
             </div>
             <p className="mb-0 mt-2 text-sm text-[#5b5f62]">مدیریت گفتگوها و درخواست‌های مشتریان در یک نمای یکپارچه</p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-[#c4c7ca] bg-white px-3 py-2 text-xs font-bold text-[#293647]">
-            <ShieldCheck aria-hidden="true" size={18} />
-            اطلاعات این صفحه mock است و در backend ذخیره نمی‌شود
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={activeWorkspace === 'tickets'}
+              className={cn(
+                'cursor-pointer rounded-lg border px-4 py-2 text-sm font-bold transition-colors',
+                activeWorkspace === 'tickets'
+                  ? 'border-accent-500 bg-accent-500 text-white'
+                  : 'border-[#c4c7ca] bg-white text-[#293647] hover:bg-orange-50',
+              )}
+              onClick={() => setRequestedWorkspace('tickets')}
+            >
+              تیکت‌ها
+            </button>
+            {canViewReviews && (
+              <button
+                type="button"
+                aria-pressed={activeWorkspace === 'reviews'}
+                className={cn(
+                  'cursor-pointer rounded-lg border px-4 py-2 text-sm font-bold transition-colors',
+                  activeWorkspace === 'reviews'
+                    ? 'border-accent-500 bg-accent-500 text-white'
+                    : 'border-[#c4c7ca] bg-white text-[#293647] hover:bg-orange-50',
+                )}
+                onClick={() => setRequestedWorkspace('reviews')}
+              >
+                نظرات محصولات
+              </button>
+            )}
           </div>
+        </div>
+
+        {activeWorkspace === 'tickets' ? (
+          <>
+        <div className="mb-5 flex items-center gap-2 rounded-lg border border-[#c4c7ca] bg-white px-3 py-2 text-xs font-bold text-[#293647]">
+          <ShieldCheck aria-hidden="true" size={18} />
+          اطلاعات تیکت‌ها mock است و در backend ذخیره نمی‌شود
         </div>
 
         <section aria-label="خلاصه پشتیبانی" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -318,6 +370,10 @@ export function AdminSupportPage() {
             )}
           </Surface>
         </div>
+          </>
+        ) : (
+          <AdminReviewsPanel />
+        )}
       </main>
     </AdminShell>
   )

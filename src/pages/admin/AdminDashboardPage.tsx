@@ -89,7 +89,7 @@ function MetricCard({
       </div>
       <div className="absolute inset-x-4 bottom-5 h-1.5 overflow-hidden rounded-full bg-[#edeef0]">
         <span
-          className="block h-full rounded-full bg-[#293647] transition-[width] duration-500"
+          className="block h-full rounded-full bg-accent-500 transition-[width] duration-500"
           style={{
             width: `${!accessible || progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%`,
           }}
@@ -386,7 +386,9 @@ export function AdminDashboardPage() {
                       <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
                         <span className="mb-2 text-xs font-bold text-[#293647]">{formatCount(item.value)}</span>
                         <span
-                          className={item.emphasis ? 'w-full max-w-28 bg-[#293647]' : 'w-full max-w-28 bg-[#dfe1e3]'}
+                          className={item.emphasis
+                            ? 'w-full max-w-28 bg-accent-500'
+                            : 'w-full max-w-28 bg-accent-500/45'}
                           style={{ height: `${item.height}%` }}
                         />
                         <span className="mt-3 whitespace-nowrap text-xs font-bold text-[#5d5e61] sm:text-sm">{item.label}</span>
@@ -411,8 +413,8 @@ export function AdminDashboardPage() {
                     <CircleDollarSign aria-hidden="true" size={24} />
                   </span>
                   <span>
-                    <strong className="block text-xl text-[#191c1d]">مدیریت قیمت‌ها</strong>
-                    <span className="mt-1 block text-sm text-[#5d5e61]">بررسی و ویرایش قیمت محصولات</span>
+                    <strong className="block text-xl text-[#191c1d]">مشاهده قیمت‌ها</strong>
+                    <span className="mt-1 block text-sm text-[#5d5e61]">بررسی قیمت فعلی محصولات</span>
                   </span>
                 </span>
                 <ChevronLeft aria-hidden="true" className="text-[#5d5e61]" size={20} />
@@ -430,8 +432,8 @@ export function AdminDashboardPage() {
                     <ClipboardCheck aria-hidden="true" size={24} />
                   </span>
                   <span>
-                    <strong className="block text-xl text-[#191c1d]">مدیریت موجودی</strong>
-                    <span className="mt-1 block text-sm text-[#5d5e61]">مدیریت چرخه انتشار کالاها</span>
+                    <strong className="block text-xl text-[#191c1d]">مشاهده موجودی</strong>
+                    <span className="mt-1 block text-sm text-[#5d5e61]">بررسی موجودی فعلی کالاها</span>
                   </span>
                 </span>
                 <ChevronLeft aria-hidden="true" className="text-[#5d5e61]" size={20} />

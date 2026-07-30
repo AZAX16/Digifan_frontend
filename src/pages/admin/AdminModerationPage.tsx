@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getBrands, type Brand } from '../../api/brands'
 import { getCategories, type Category } from '../../api/categories'
@@ -9,7 +9,6 @@ import {
   discontinueProduct,
   duplicateProduct,
   getProducts,
-  markProductOutOfStock,
   publishProduct,
   unpublishProduct,
   type Product,
@@ -33,15 +32,19 @@ import {
   type BadgeVariant,
 } from '../../components/ui'
 import { toPersianDigits } from '../../utils/persianDigits'
+import { formatCurrencyLabel } from '../../utils/currency'
 import { ProductEditorDialog, type ProductEditorTarget } from './ProductEditorDialog'
 import { AdminShell } from './AdminShell'
+
+const ProductAssetsDialog = lazy(() =>
+  import('./ProductAssetsDialog').then((module) => ({ default: module.ProductAssetsDialog })),
+)
 
 type ProductAction =
   | 'publish'
   | 'unpublish'
   | 'archive'
   | 'discontinue'
-  | 'outOfStock'
   | 'duplicate'
   | 'delete'
 
@@ -162,6 +165,7 @@ export function AdminModerationPage() {
   const [pendingProductId, setPendingProductId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [editorTarget, setEditorTarget] = useState<ProductEditorTarget | null>(null)
+  const [assetsTarget, setAssetsTarget] = useState<Product | null>(null)
   const canManageCategories = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories)
   const canManageBrands = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageBrands)
   const optionsKey = `${Number(canManageCategories)}:${Number(canManageBrands)}`
@@ -285,13 +289,6 @@ export function AdminModerationPage() {
       return
     }
 
-    if (
-      action === 'outOfStock' &&
-      !window.confirm(`محصول «${getProductName(product)}» ناموجود ثبت شود؟`)
-    ) {
-      return
-    }
-
     setPendingAction(action)
     setPendingProductId(product.id)
     setFeedback(null)
@@ -301,7 +298,6 @@ export function AdminModerationPage() {
       if (action === 'unpublish') await unpublishProduct(product.id)
       if (action === 'archive') await archiveProduct(product.id)
       if (action === 'discontinue') await discontinueProduct(product.id)
-      if (action === 'outOfStock') await markProductOutOfStock(product.id)
       if (action === 'duplicate') await duplicateProduct(product.id)
       if (action === 'delete') await deleteProduct(product.id)
 
@@ -315,7 +311,6 @@ export function AdminModerationPage() {
         unpublish: 'انتشار محصول متوقف شد.',
         archive: 'محصول بایگانی شد.',
         discontinue: 'تولید محصول متوقف شد.',
-        outOfStock: 'محصول ناموجود ثبت شد.',
         duplicate: 'یک نسخه جدید از محصول ساخته شد.',
         delete: 'محصول حذف شد.',
       }
@@ -329,6 +324,10 @@ export function AdminModerationPage() {
   }
 
   const isProductBusy = pendingProductId !== null
+  const closeAssetsDialog = useCallback(() => setAssetsTarget(null), [])
+  const handleAssetsChanged = useCallback(() => {
+    setRefreshKey((currentKey) => currentKey + 1)
+  }, [])
 
   return (
     <AdminShell
@@ -382,7 +381,7 @@ export function AdminModerationPage() {
                 variant="warning"
               >
                 فیلترها و ویرایش جزئیات دسته‌بندی یا برند فقط با مجوزهای مربوط در دسترس هستند؛
-                مدیریت موجودی و وضعیت محصول همچنان فعال است.
+                مدیریت وضعیت، تنوع‌ها و تصاویر محصول همچنان فعال است.
               </Alert>
             )}
 
@@ -491,6 +490,7 @@ export function AdminModerationPage() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant={statusDetails.variant}>{statusDetails.label}</Badge>
+                                  {product.hasVariants && <Badge variant="accent">دارای تنوع</Badge>}
                                   <span className="text-xs text-muted">{getDisplayValue(product.categoryName, 'بدون دسته‌بندی')}</span>
                                   <span aria-hidden="true" className="size-1 rounded-full bg-border" />
                                   <span className="text-xs text-muted">{getDisplayValue(product.brandName, 'بدون برند')}</span>
@@ -502,7 +502,7 @@ export function AdminModerationPage() {
                                   {description?.length ? description : 'توضیحی برای این محصول ثبت نشده است.'}
                                 </p>
                                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
-                                  <span>قیمت: <strong className="text-ink">{priceFormatter.format(product.price)} {product.currency ?? ''}</strong></span>
+                                  <span>قیمت: <strong className="text-ink">{priceFormatter.format(product.price)} {formatCurrencyLabel(product.currency)}</strong></span>
                                   <span>
                                     موجودی:{' '}
                                     <strong className={isLowStock ? 'text-danger-600' : 'text-ink'}>
@@ -513,7 +513,6 @@ export function AdminModerationPage() {
                                     نقطه سفارش: <strong className="text-ink">{toPersianDigits(String(product.reorderPoint))}</strong>
                                   </span>
                                   <span>ساخته‌شده: {formatProductDate(product.createdAt)}</span>
-                                  {product.slug?.trim() && <span className="break-all" dir="ltr">/{product.slug}</span>}
                                 </div>
                               </div>
                             </div>
@@ -536,10 +535,10 @@ export function AdminModerationPage() {
                                 className="w-full sm:w-auto"
                                 disabled={isProductBusy}
                                 size="sm"
-                                variant="outline"
-                                onClick={() => setEditorTarget({ mode: 'inventory', product })}
+                                variant="secondary"
+                                onClick={() => setAssetsTarget(product)}
                               >
-                                موجودی
+                                تنوع‌ها و تصاویر
                               </Button>
                               {isStatus(product, 'active') ? (
                                 <Button
@@ -575,20 +574,6 @@ export function AdminModerationPage() {
                                   بایگانی
                                 </Button>
                               )}
-                              {!isStatus(product, 'outOfStock') &&
-                                !isStatus(product, 'archived') &&
-                                !isStatus(product, 'discontinued') && (
-                                  <Button
-                                    className="w-full sm:w-auto"
-                                    disabled={isProductBusy}
-                                    loading={isPending && pendingAction === 'outOfStock'}
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => void runProductAction(product, 'outOfStock')}
-                                  >
-                                    ثبت ناموجودی
-                                  </Button>
-                                )}
                               {!isStatus(product, 'archived') && !isStatus(product, 'discontinued') && (
                                 <Button
                                   className="w-full sm:w-auto"
@@ -640,7 +625,7 @@ export function AdminModerationPage() {
               </section>
             </div>
       </main>
-      {editorTarget && (editorTarget.mode === 'inventory' || canEditProductDetails) && (
+      {editorTarget && canEditProductDetails && (
         <ProductEditorDialog
           key={editorTarget.mode === 'create'
             ? 'create'
@@ -656,6 +641,23 @@ export function AdminModerationPage() {
             setFeedback({ variant: 'success', title: 'اطلاعات محصول ذخیره شد.' })
           }}
         />
+      )}
+      {assetsTarget && (
+        <Suspense
+          fallback={(
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brand-950/50 p-4 backdrop-blur-sm" dir="rtl">
+              <Surface elevation="raised" padding="lg">
+                <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی مدیریت تنوع‌ها و تصاویر…</p>
+              </Surface>
+            </div>
+          )}
+        >
+          <ProductAssetsDialog
+            product={assetsTarget}
+            onClose={closeAssetsDialog}
+            onProductChanged={handleAssetsChanged}
+          />
+        </Suspense>
       )}
     </AdminShell>
   )

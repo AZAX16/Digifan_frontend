@@ -45,6 +45,7 @@ import { PriceRange } from '../../components/ui/PriceRange'
 import { Rating } from '../../components/ui/Rating'
 import { SortBar, type SortOption } from '../../components/ui/SortBar'
 import { cn } from '../../utils/cn'
+import { formatCurrencyLabel } from '../../utils/currency'
 import {
   categoryProductsConfigs,
   mockBrands,
@@ -779,7 +780,7 @@ function mapApiProducts(items: StorefrontProductListItem[]): DisplayProduct[] {
     name: getTextOrFallback(item.name, 'محصول بدون نام'),
     summary: getTextOrFallback(item.summary, 'اطلاعات تکمیلی ثبت نشده است'),
     price: item.price,
-    currency: getTextOrFallback(item.currency, 'تومان'),
+    currency: formatCurrencyLabel(item.currency),
     brandName: getTextOrFallback(item.brandName, ''),
     brandSlug: getTextOrFallback(item.brandSlug, ''),
     isMock: false,
@@ -1044,7 +1045,7 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
                     role="status"
                     className="mb-4 rounded-df-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800"
                   >
-                    API برای اسلاگ «{categorySlug}» محصولی برنگرداند؛ کارت‌های زیر نمایشی‌اند.
+                    API برای این دسته‌بندی محصولی برنگرداند؛ کارت‌های زیر نمایشی‌اند.
                   </div>
                 )}
 
