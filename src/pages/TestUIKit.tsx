@@ -142,6 +142,16 @@ export function TestUIKit() {
               <Badge variant="accent">DigiFan</Badge>
             </div>
             <p className="mb-0 mt-1 text-sm text-muted">صفحه‌ی بررسی سریع کامپوننت‌های واقعی پروژه</p>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-3"
+              onClick={() => {
+                window.location.hash = '#/landing'
+              }}
+            >
+              مشاهده صفحه اصلی فنینو
+            </Button>
           </div>
 
           <nav aria-label="بخش‌های صفحه" className="flex flex-wrap gap-2">
