@@ -1,6 +1,6 @@
 # DigiFan Project Handoff
 
-> Last updated: 2026-07-30  
+> Last updated: 2026-07-31
 > Purpose: this is the authoritative handoff for developers and coding agents. Read it before changing the project and update it whenever routes, API contracts, mock/real boundaries, deployment behavior, or major TODOs change.
 
 ## Current snapshot
@@ -9,10 +9,10 @@
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
 - Working branch: `feat/admin-page`
-- Base commit before the current uncommitted admin catalog/review work: `fec1718` (`feat(Admin): added clearance level support`)
+- Base commit before the current uncommitted landing work: `87e628d` (`fix(admin): UX design changes`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted admin catalog/review/product-asset changes described below.
-- Suggested commit message for the current work: `feat(admin): add catalog, review, and product asset management`
+- The working tree intentionally contains the uncommitted Fanino landing-page changes described below.
+- Suggested commit message for the current work: `feat(storefront): add Fanino landing page`
 
 The latest supplied OpenAPI document is:
 
@@ -24,7 +24,7 @@ It describes OpenAPI 3.0.1, `DigiFan.Backend.API` version `1.0`. Treat it as the
 
 ## Product and architecture
 
-DigiFan is an RTL Persian SPA with an authenticated administration area, a public UI-kit showcase, and two public Figma-derived category storefront pages.
+DigiFan is an RTL Persian SPA with an authenticated administration area, a public UI-kit showcase, a public Fanino landing page, and two public Figma-derived category storefront pages.
 
 Technology:
 
@@ -75,11 +75,12 @@ public                  Favicon and robots.txt
 | `#/admin/support` | Authenticated | Mock/local ticket workspace plus real review list/reply when `reports.reviews.view` is present |
 | `#/admin/account` | Authenticated | Real profile, phone change, password change, and logout |
 | `#/ui-kit` | Public | Living component showcase; intentionally backend-free |
+| `#/landing` | Public | Responsive Fanino landing page; real customer auth and storefront product search/list with clearly labeled mock commerce/merchandising sections |
 | `#/category/water-pumps` | Public | Responsive water-pump storefront; public products API with labeled mock fallbacks |
 | `#/category/accessories` | Public | Responsive accessories storefront; public products API with labeled mock fallbacks |
 | Empty or unknown hash | Protected | Resolves to the admin dashboard/login |
 
-The app uses hash fragments, so Vercel only sees `/`; it cannot distinguish admin and UI-kit routes for server metadata.
+The app uses hash fragments, so Vercel only sees `/`; it cannot distinguish admin, UI-kit, landing, or storefront routes for server metadata.
 
 ## Authentication and account behavior
 
@@ -127,6 +128,20 @@ Phone-number behavior:
 - The backend contract does not document whether canonical values must be `09...`, `+989...`, or something else; backend documentation is still needed.
 
 Admin creation/signup is not available. An administrator must already exist in the backend.
+
+### Customer authentication on the landing page
+
+`src/api/customerAuth.ts` independently implements the customer contract used by `#/landing`:
+
+- `POST /api/customer/auth/register` with `{ phoneNumber, password }`
+- `POST /api/customer/auth/login` with `{ phoneNumber, password }`
+- `POST /api/customer/auth/refresh` with `{ refreshToken }`
+- `POST /api/customer/auth/logout` with `{ refreshToken }`
+- `GET /api/customer/account/profile`
+
+Customer access tokens are memory-only; refresh tokens and expiry are stored under a customer-specific `sessionStorage` key so they never conflict with the admin session. The client refreshes expired access tokens, retries one authorized 401 after refresh, restores the customer profile on landing-page load, normalizes Persian/Arabic phone digits to Western digits, and clears local state before best-effort logout revocation.
+
+The current supplied OpenAPI has no customer cart or checkout endpoints. Landing-page cart quantities and checkout remain local/mock and are explicitly labeled as such.
 
 ### Clearance and frontend authorization
 
@@ -285,7 +300,7 @@ The support page provides a real paginated review workspace and reply editor whe
 
 ### Public storefront products
 
-`src/api/storefrontProducts.ts` is consumed by both category storefront routes:
+`src/api/storefrontProducts.ts` is consumed by the landing page and both category storefront routes:
 
 - `GET /api/storefront/products`
 - `GET /api/storefront/products/{slug}`
@@ -316,7 +331,7 @@ Oldest
 
 Do not assume the same enum is valid for the admin product endpoint: its `Sort` parameter remains an unconstrained string in OpenAPI.
 
-The pages use the API for product names, summaries, prices, currency, category/brand fields, search, category/brand slug filtering, price filtering, supported sorting, and pagination. Default category slugs are `water-pump` and `accessories`; a test slug can be supplied as `?categorySlug=...` on either hash route.
+The pages use the API for product names, summaries, prices, currency, category/brand fields, search, category/brand slug filtering, price filtering, supported sorting, and pagination. The landing page requests the four newest products and submits header searches to the same endpoint. Default category slugs are `water-pump` and `accessories`; a test slug can be supplied as `?categorySlug=...` on either category hash route.
 
 The live backend check on 2026-07-30 returned one public product under category slug `electronics` and no products for either design slug. Empty/error results therefore render clearly labeled mock cards so the complete Figma layout remains testable without misrepresenting their source.
 
@@ -341,6 +356,8 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Brand CRUD
 - Product review listing and replies
 - UI-kit components and showcase
+- Customer register/login/session refresh/profile restoration/logout on the landing page
+- Landing-page newest-product loading and submitted product search
 - Public storefront product search/filter/supported sort/pagination when matching backend products exist
 
 ### Partial or locally derived
@@ -352,6 +369,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Base-product price and inventory are displayed after creation but cannot be edited; variant price and inventory are editable.
 - Brand management shares the content route with categories rather than having a separate route.
 - Storefront category pages are real API-backed for fields/endpoints the contract exposes and fall back to explicitly labeled demo cards when a category is empty or unavailable.
+- The Fanino landing page is Figma-derived and responsive; its product grid is API-backed with labeled fallback cards while the brand name and static content are provisional.
 - Storefront brand choices are derived from the current API page because no public brand-list endpoint exists.
 - `Popular` sorting is intentionally marked demo-only because the backend exposes no popularity/rating sort.
 
@@ -361,6 +379,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Dashboard sales/revenue/orders/support/announcement business data
 - Notification bell (disabled)
 - Storefront hero copy/images, subcategory taxonomy, product imagery, ratings, new/discount badges, cart actions, technical filters, promotional banner, brand artwork, service claims, and footer contact content
+- Landing-page hero carousel, category taxonomy, ratings/badges, promotions, special offers, brand artwork, service claims, cart/checkout, and non-product navigation destinations
 
 ## UI kit and design rules
 
@@ -395,7 +414,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 
 ## Performance safeguards
 
-- Admin pages and UI Kit are lazy-loaded as separate route chunks.
+- Admin pages, UI Kit, category storefront, and landing page are lazy-loaded as separate route chunks.
 - Unrestricted protected routes may be prefetched during session restoration; clearance-protected chunks are only prefetched after authorization is known.
 - Eager login/app imports avoid pulling UI-kit-only components into the entry bundle.
 - Category and brand requests use short-lived in-memory caching and request deduplication.
@@ -408,20 +427,22 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Product lists use server pagination.
 - The 24 kB product-assets editor is lazy-loaded as a separate chunk only when an administrator opens it.
 - The public category route is lazy-loaded as its own chunk.
+- The landing page is a separate ~10 kB gzip route chunk and reuses the existing ~160 kB optimized WebP pump hero instead of adding another large raster.
 - Storefront images use lazy decoding/loading except the LCP hero image.
 - Generated transparent hero assets are resized alpha WebP files: water pump ~160 kB and pressure tank ~41 kB.
 - Storefront API requests are abortable and stale requests are cancelled when filters change.
 - Vite’s content-hashed assets receive one-year immutable caching on Vercel.
 - Authenticated `/api` responses are configured as private/no-store.
 
-Latest verified production build after the product-assets work:
+Latest verified production build after the Fanino landing-page work:
 
 ```text
-entry JS:                 216.84 kB raw / 69.14 kB gzip
-CSS:                       66.85 kB raw / 12.85 kB gzip
-admin moderation:         20.25 kB raw /  6.49 kB gzip
+entry JS:                 217.40 kB raw / 69.37 kB gzip
+CSS:                       73.33 kB raw / 13.77 kB gzip
+admin moderation:         20.35 kB raw /  6.52 kB gzip
 product-assets editor:    24.12 kB raw /  6.73 kB gzip (lazy)
-category storefront:      32.20 kB raw / 10.11 kB gzip
+category storefront:      29.57 kB raw /  9.05 kB gzip
+Fanino landing page:      33.32 kB raw / 10.25 kB gzip (lazy)
 water-pump hero asset:   159.91 kB
 pressure-tank asset:      41.30 kB
 ```
@@ -501,7 +522,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-07-30 after the product-assets implementation:
+Verified on 2026-07-31 after the Fanino landing-page implementation:
 
 ```text
 npm run check: PASS
@@ -510,7 +531,7 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-The public storefront endpoint was also verified through the local Vite proxy. It returned HTTP success and one `electronics` product. Headless Edge visual QA passed at 1440px and a DevTools-emulated 390px viewport; the 390px document measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations still require separate manual verification.
+The public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
 
 The newest live authentication/profile responses were verified with the supplied test administrator and included role `super-admin` plus the expected permission array. Read-only checks also confirmed paginated brand/review responses, the product `hasVariants` field, a live variant array and its fields, and an empty image array. No variant/image mutation was run against live data. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
 
@@ -531,6 +552,8 @@ Before merging/deploying, manually verify in a browser:
 13. Both category routes and the Products dropdown.
 14. A real category slug using `?categorySlug=...` after water-pump/accessory products are published.
 15. One account from each lower permission set: hidden navigation, direct-route denial, and dashboard partial-data behavior.
+16. Landing-page customer register/login/refresh/logout with a real customer account.
+17. Landing-page default product loading, product search, mobile menu, and local demo cart behavior.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -557,11 +580,13 @@ Each item is intentionally one line:
 - **Reliability:** Reduce cold starts, tune database connections/timeouts, and monitor upstream failures that surface as 502 responses.
 - **CORS:** Explicitly allow the production Vercel origin and required local development origins.
 - **Storefront media:** Add product images/gallery, availability, discounts, and rating data required by the existing commerce UI.
+- **Customer cart/checkout:** Add authenticated cart-item and checkout/order endpoints so the landing-page demo cart can become persistent and transactional.
 
 ## Frontend work still needed
 
 - Build the public product-detail page using `getStorefrontProduct`.
 - Replace storefront mock sections as media, rating, availability, taxonomy, cart, technical-attribute, brand-list, and CMS endpoints become available.
+- Replace the provisional Fanino logo/text artwork and placeholder category/brand assets when final brand files are supplied.
 - Move public storefront pages to real server-visible URLs and SSR/SSG before enabling indexing.
 - Build administration and report pages for the permission claims that currently have no matching frontend route.
 - Replace the support mock with backend data when endpoints exist.
@@ -593,29 +618,13 @@ Each item is intentionally one line:
 
 ## Current uncommitted change set
 
-At the time this handoff was written, the current admin catalog/review/product-asset changes are:
+At the time this handoff was written, the current Fanino landing-page changes are:
 
 ```text
 src/App.tsx
-src/api/productAssets.ts
-src/api/products.ts
-src/api/reviews.ts
-src/api/storefrontProducts.ts
-src/pages/admin/AdminCategoriesPage.tsx
-src/pages/admin/AdminDashboardPage.tsx
-src/pages/admin/AdminModerationPage.tsx
-src/pages/admin/AdminShell.tsx
-src/pages/admin/AdminSupportPage.tsx
-src/pages/admin/AdminReviewsPanel.tsx
-src/pages/admin/BrandsManager.tsx
-src/pages/admin/ProductEditorDialog.tsx
-src/pages/admin/ProductAssetsDialog.tsx
-src/pages/admin/ProductImagesPanel.tsx
-src/pages/admin/ProductVariantsPanel.tsx
-src/pages/categories/CategoriesManagerPage.tsx
-src/pages/storefront/CategoryProductsPage.tsx
-src/utils/currency.ts
-src/utils/numericInput.ts
+src/api/customerAuth.ts
+src/pages/TestUIKit.tsx
+src/pages/storefront/LandingPage.tsx
 AGENTS.md
 ```
 

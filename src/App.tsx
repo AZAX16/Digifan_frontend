@@ -36,6 +36,9 @@ const CategoryProductsPage = lazy(() =>
     default: Page,
   })),
 )
+const LandingPage = lazy(() =>
+  import('./pages/storefront/LandingPage').then(({ LandingPage: Page }) => ({ default: Page })),
+)
 
 type AppPage =
   | 'dashboard'
@@ -44,9 +47,10 @@ type AppPage =
   | 'support'
   | 'account'
   | 'ui-kit'
+  | 'landing'
   | 'storefront-water-pumps'
   | 'storefront-accessories'
-type PublicAppPage = 'ui-kit' | 'storefront-water-pumps' | 'storefront-accessories'
+type PublicAppPage = 'ui-kit' | 'landing' | 'storefront-water-pumps' | 'storefront-accessories'
 type ProtectedAppPage = Exclude<AppPage, PublicAppPage>
 const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
   dashboard: 'پیشخوان مدیریت',
@@ -74,6 +78,7 @@ function getPageFromHash(): AppPage {
   const route = window.location.hash.split('?')[0]
 
   if (route === '#/ui-kit') return 'ui-kit'
+  if (route === '#/landing') return 'landing'
   if (route === '#/category/water-pumps') return 'storefront-water-pumps'
   if (route === '#/category/accessories') return 'storefront-accessories'
   if (route === '#/categories') return 'categories'
@@ -135,9 +140,11 @@ function AppContent() {
   const [page, setPage] = useState<AppPage>(getPageFromHash)
   const { status, profile } = useAuth()
   const isUIKit = page === 'ui-kit'
+  const isLanding = page === 'landing'
   const isStorefront =
     page === 'storefront-water-pumps' || page === 'storefront-accessories'
-  const isProtectedPage = !isUIKit && !isStorefront
+  const isStandalonePublicPage = isLanding || isStorefront
+  const isProtectedPage = !isUIKit && !isStandalonePublicPage
   const usesAdminShell =
     status === 'authenticated' &&
     (page === 'dashboard' || page === 'products' || page === 'categories' || page === 'support' || page === 'account')
@@ -150,7 +157,9 @@ function AppContent() {
   }, [])
 
   const pageLabel =
-    page === 'storefront-water-pumps'
+    isLanding
+      ? 'صفحه اصلی فنینو'
+      : page === 'storefront-water-pumps'
       ? 'پمپ آب'
       : page === 'storefront-accessories'
         ? 'تجهیزات جانبی'
@@ -161,8 +170,8 @@ function AppContent() {
             : 'ورود مدیر'
 
   useEffect(() => {
-    document.title = `${pageLabel} | DigiFan`
-  }, [pageLabel])
+    document.title = `${pageLabel} | ${isLanding ? 'Fanino' : 'DigiFan'}`
+  }, [isLanding, pageLabel])
 
   useEffect(() => {
     if (!isProtectedPage) return
@@ -177,7 +186,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen">
-      {!usesAdminShell && !isStorefront && (
+      {!usesAdminShell && !isStandalonePublicPage && (
         <header
           className="sticky top-0 z-[60] border-b border-border-soft bg-white/95 shadow-sm backdrop-blur"
           dir="rtl"
@@ -237,6 +246,8 @@ function AppContent() {
       <Suspense fallback={<AuthLoadingPage />}>
         {isUIKit ? (
           <TestUIKit />
+        ) : isLanding ? (
+          <LandingPage />
         ) : page === 'storefront-water-pumps' ? (
           <CategoryProductsPage variant="water-pumps" />
         ) : page === 'storefront-accessories' ? (
