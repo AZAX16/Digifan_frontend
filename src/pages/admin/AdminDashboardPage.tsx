@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   FileClock,
   FolderTree,
+  LockKeyhole,
   RefreshCw,
   Tags,
 } from 'lucide-react'
@@ -16,6 +17,11 @@ import { getBrandCount, invalidateBrandQueries } from '../../api/brands'
 import { getCategoryCount, invalidateCategoryQueries } from '../../api/categories'
 import { ApiError } from '../../api/client'
 import { getProducts } from '../../api/products'
+import { useAuth } from '../../components/auth/authContext'
+import {
+  ADMIN_PERMISSIONS,
+  hasAdminPermission,
+} from '../../components/auth/adminPermissions'
 import { Alert, Button, Skeleton, Surface } from '../../components/ui'
 import { toPersianDigits } from '../../utils/persianDigits'
 import { AdminShell } from './AdminShell'
@@ -35,6 +41,7 @@ interface MetricCardProps {
   description: string
   icon: ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }>
   progress: number
+  accessible: boolean
 }
 
 const EMPTY_DASHBOARD: DashboardData = {
@@ -54,7 +61,14 @@ function formatCount(value: number) {
   return toPersianDigits(new Intl.NumberFormat('en-US').format(value))
 }
 
-function MetricCard({ label, value, description, icon: Icon, progress }: MetricCardProps) {
+function MetricCard({
+  label,
+  value,
+  description,
+  icon: Icon,
+  progress,
+  accessible,
+}: MetricCardProps) {
   return (
     <Surface
       className="relative min-h-[162px] overflow-hidden !rounded-xl !border-[#293647] !bg-white !p-4 !shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
@@ -65,7 +79,7 @@ function MetricCard({ label, value, description, icon: Icon, progress }: MetricC
         <div className="text-right">
           <p className="m-0 text-sm font-semibold tracking-[0.14px] text-[#5d5e61]">{label}</p>
           <p className="mb-0 mt-1 text-[40px] font-bold leading-[48px] tracking-[-0.8px] text-[#191c1d]">
-            {formatCount(value)}
+            {accessible ? formatCount(value) : '—'}
           </p>
           <p className="mb-0 mt-1 text-sm leading-6 text-[#5d5e61]">{description}</p>
         </div>
@@ -76,7 +90,9 @@ function MetricCard({ label, value, description, icon: Icon, progress }: MetricC
       <div className="absolute inset-x-4 bottom-5 h-1.5 overflow-hidden rounded-full bg-[#edeef0]">
         <span
           className="block h-full rounded-full bg-[#293647] transition-[width] duration-500"
-          style={{ width: `${progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%` }}
+          style={{
+            width: `${!accessible || progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%`,
+          }}
         />
       </div>
       <span aria-hidden="true" className="absolute inset-x-px bottom-px h-1 bg-[#edeef0]" />
@@ -85,14 +101,19 @@ function MetricCard({ label, value, description, icon: Icon, progress }: MetricC
 }
 
 export function AdminDashboardPage() {
+  const { profile } = useAuth()
   const [data, setData] = useState<DashboardData>(EMPTY_DASHBOARD)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [resolvedRefreshKey, setResolvedRefreshKey] = useState<number | null>(null)
+  const [resolvedRequestKey, setResolvedRequestKey] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
-  const isLoading = resolvedRefreshKey !== refreshKey
+  const canManageProducts = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageProducts)
+  const canManageCategories = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories)
+  const canManageBrands = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageBrands)
+  const requestKey = `${refreshKey}:${Number(canManageProducts)}:${Number(canManageCategories)}:${Number(canManageBrands)}`
+  const isLoading = resolvedRequestKey !== requestKey
   const handleRefresh = () => {
-    invalidateBrandQueries()
-    invalidateCategoryQueries()
+    if (canManageBrands) invalidateBrandQueries()
+    if (canManageCategories) invalidateCategoryQueries()
     setRefreshKey((currentKey) => currentKey + 1)
   }
 
@@ -101,48 +122,58 @@ export function AdminDashboardPage() {
     let isActive = true
 
     void Promise.allSettled([
-      getProducts({ page: 1, pageSize: 1 }, abortController.signal),
-      getProducts({ page: 1, pageSize: 1, status: 'active' }, abortController.signal),
-      getProducts({ page: 1, pageSize: 1, status: 'draft' }, abortController.signal),
-      getProducts({ page: 1, pageSize: 1, status: 'archived' }, abortController.signal),
-      getCategoryCount(abortController.signal),
-      getBrandCount(abortController.signal),
+      canManageProducts
+        ? getProducts({ page: 1, pageSize: 1 }, abortController.signal)
+        : Promise.resolve(null),
+      canManageProducts
+        ? getProducts({ page: 1, pageSize: 1, status: 'active' }, abortController.signal)
+        : Promise.resolve(null),
+      canManageProducts
+        ? getProducts({ page: 1, pageSize: 1, status: 'draft' }, abortController.signal)
+        : Promise.resolve(null),
+      canManageProducts
+        ? getProducts({ page: 1, pageSize: 1, status: 'archived' }, abortController.signal)
+        : Promise.resolve(null),
+      canManageCategories ? getCategoryCount(abortController.signal) : Promise.resolve(null),
+      canManageBrands ? getBrandCount(abortController.signal) : Promise.resolve(null),
     ] as const)
       .then((results) => {
         if (!isActive) return
 
         const [allProducts, active, drafts, archived, categoryCount, brandCount] = results
         setData((currentData) => ({
-          totalProducts: allProducts.status === 'fulfilled'
+          totalProducts: allProducts.status === 'fulfilled' && allProducts.value
             ? allProducts.value.totalCount
             : currentData.totalProducts,
-          activeProducts: active.status === 'fulfilled'
+          activeProducts: active.status === 'fulfilled' && active.value
             ? active.value.totalCount
             : currentData.activeProducts,
-          draftProducts: drafts.status === 'fulfilled'
+          draftProducts: drafts.status === 'fulfilled' && drafts.value
             ? drafts.value.totalCount
             : currentData.draftProducts,
-          archivedProducts: archived.status === 'fulfilled'
+          archivedProducts: archived.status === 'fulfilled' && archived.value
             ? archived.value.totalCount
             : currentData.archivedProducts,
-          categories: categoryCount.status === 'fulfilled'
+          categories: categoryCount.status === 'fulfilled' && categoryCount.value !== null
             ? categoryCount.value
             : currentData.categories,
-          brands: brandCount.status === 'fulfilled' ? brandCount.value : currentData.brands,
+          brands: brandCount.status === 'fulfilled' && brandCount.value !== null
+            ? brandCount.value
+            : currentData.brands,
         }))
 
         const failedRequest = results.find((result) => result.status === 'rejected')
         setFeedback(failedRequest?.status === 'rejected' ? getErrorMessage(failedRequest.reason) : null)
       })
       .finally(() => {
-        if (isActive) setResolvedRefreshKey(refreshKey)
+        if (isActive) setResolvedRequestKey(requestKey)
       })
 
     return () => {
       isActive = false
       abortController.abort()
     }
-  }, [refreshKey])
+  }, [canManageBrands, canManageCategories, canManageProducts, requestKey])
 
   const metrics = useMemo(() => {
     const total = Math.max(data.totalProducts, 1)
@@ -154,6 +185,7 @@ export function AdminDashboardPage() {
         description: 'ثبت‌شده در سامانه',
         icon: Boxes,
         progress: data.totalProducts > 0 ? 100 : 0,
+        accessible: canManageProducts,
       },
       {
         label: 'محصولات فعال',
@@ -161,6 +193,7 @@ export function AdminDashboardPage() {
         description: 'قابل نمایش در فروشگاه',
         icon: BadgeCheck,
         progress: (data.activeProducts / total) * 100,
+        accessible: canManageProducts,
       },
       {
         label: 'در انتظار بررسی',
@@ -168,6 +201,7 @@ export function AdminDashboardPage() {
         description: 'نیازمند تکمیل یا انتشار',
         icon: FileClock,
         progress: (data.draftProducts / total) * 100,
+        accessible: canManageProducts,
       },
       {
         label: 'بایگانی‌شده',
@@ -175,9 +209,10 @@ export function AdminDashboardPage() {
         description: 'خارج از چرخه انتشار',
         icon: Archive,
         progress: (data.archivedProducts / total) * 100,
+        accessible: canManageProducts,
       },
     ]
-  }, [data])
+  }, [canManageProducts, data])
 
   const chartItems = useMemo(() => {
     const maxValue = Math.max(
@@ -202,24 +237,32 @@ export function AdminDashboardPage() {
   const managementNotices = [
     {
       title: 'محصولات نیازمند بررسی',
-      description: `${formatCount(data.draftProducts)} محصول در وضعیت پیش‌نویس قرار دارد.`,
+      description: canManageProducts
+        ? `${formatCount(data.draftProducts)} محصول در وضعیت پیش‌نویس قرار دارد.`
+        : 'برای مشاهده محصولات مجوز لازم را ندارید.',
       icon: FileClock,
     },
     {
       title: 'دسته‌بندی‌های سامانه',
-      description: `${formatCount(data.categories)} دسته‌بندی برای محصولات تعریف شده است.`,
+      description: canManageCategories
+        ? `${formatCount(data.categories)} دسته‌بندی برای محصولات تعریف شده است.`
+        : 'برای مشاهده دسته‌بندی‌ها مجوز لازم را ندارید.',
       icon: FolderTree,
     },
     {
       title: 'برندهای ثبت‌شده',
-      description: `${formatCount(data.brands)} برند در فهرست مدیریت موجود است.`,
+      description: canManageBrands
+        ? `${formatCount(data.brands)} برند در فهرست مدیریت موجود است.`
+        : 'برای مشاهده برندها مجوز لازم را ندارید.',
       icon: Tags,
     },
     {
       title: 'وضعیت اتصال API',
       description: feedback
         ? 'بخشی از اطلاعات دریافت شد؛ برای تکمیل داده‌ها دوباره تلاش کنید.'
-        : 'اطلاعات این صفحه مستقیماً از backend دریافت شد.',
+        : canManageProducts || canManageCategories || canManageBrands
+          ? 'اطلاعات مجاز این صفحه مستقیماً از backend دریافت شد.'
+          : 'نمایش داده‌ها مطابق سطح دسترسی حساب محدود شده است.',
       icon: BadgeCheck,
     },
   ]
@@ -311,7 +354,8 @@ export function AdminDashboardPage() {
                 </div>
                 <button
                   type="button"
-                  className="flex cursor-pointer items-center gap-1 text-sm font-bold text-[#293647] hover:underline"
+                  disabled={!canManageProducts}
+                  className="flex cursor-pointer items-center gap-1 text-sm font-bold text-[#293647] hover:underline disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:no-underline"
                   onClick={() => {
                     window.location.hash = '#/admin/products'
                   }}
@@ -323,6 +367,13 @@ export function AdminDashboardPage() {
 
               {isLoading ? (
                 <Skeleton className="mt-8 h-72 w-full rounded-lg" />
+              ) : !canManageProducts ? (
+                <div className="flex h-[317px] flex-col items-center justify-center text-center text-[#5d5e61]">
+                  <LockKeyhole aria-hidden="true" size={34} strokeWidth={1.8} />
+                  <p className="mb-0 mt-3 text-sm font-bold">
+                    سطح دسترسی شما اجازه مشاهده وضعیت محصولات را نمی‌دهد.
+                  </p>
+                </div>
               ) : (
                 <div className="relative mt-8 h-[285px] border-b border-dashed border-[#d9dcdf]" role="img" aria-label="نمودار وضعیت انتشار محصولات">
                   <div className="pointer-events-none absolute inset-0 grid grid-rows-3">
@@ -349,7 +400,8 @@ export function AdminDashboardPage() {
             <div className="grid gap-6 sm:grid-cols-2">
               <button
                 type="button"
-                className="flex min-h-28 cursor-pointer items-center justify-between rounded-xl border border-[#293647] bg-white px-6 text-right transition-colors hover:bg-[#f3f4f5]"
+                disabled={!canManageProducts}
+                className="flex min-h-28 cursor-pointer items-center justify-between rounded-xl border border-[#293647] bg-white px-6 text-right transition-colors hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white"
                 onClick={() => {
                   window.location.hash = '#/admin/products'
                 }}
@@ -367,7 +419,8 @@ export function AdminDashboardPage() {
               </button>
               <button
                 type="button"
-                className="flex min-h-28 cursor-pointer items-center justify-between rounded-xl border border-[#293647] bg-white px-6 text-right transition-colors hover:bg-[#f3f4f5]"
+                disabled={!canManageProducts}
+                className="flex min-h-28 cursor-pointer items-center justify-between rounded-xl border border-[#293647] bg-white px-6 text-right transition-colors hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white"
                 onClick={() => {
                   window.location.hash = '#/admin/products'
                 }}

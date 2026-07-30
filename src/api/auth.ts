@@ -6,11 +6,19 @@ export interface AdminLoginRequest {
   password: string
 }
 
+export interface AdminContext {
+  id: string
+  phoneNumber: string | null
+  role: string | null
+  permissions: string[] | null
+}
+
 export interface AdminAuthResult {
   accessToken: string | null
   accessTokenExpiresAt: string | null
   refreshToken: string | null
   refreshTokenExpiresAt: string | null
+  administrator?: AdminContext | null
 }
 
 interface AdminLoginResult extends AdminAuthResult {
@@ -35,6 +43,16 @@ export interface AdminProfile {
   id: string
   phoneNumber: string | null
   isActive: boolean
+  role: string | null
+  permissions: string[]
+}
+
+interface AdminProfileResponse {
+  id: string
+  phoneNumber: string | null
+  isActive: boolean
+  role?: string | null
+  permissions?: string[] | null
 }
 
 interface RefreshSession {
@@ -114,6 +132,33 @@ function updateCachedProfile(profile: AdminProfile | undefined) {
   profileListeners.forEach((listener) => listener(profile ?? null))
 }
 
+function normalizePermissions(permissions: string[] | null | undefined) {
+  return Array.from(
+    new Set(
+      (permissions ?? [])
+        .filter((permission): permission is string => typeof permission === 'string')
+        .map((permission) => permission.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  )
+}
+
+function normalizeOptionalString(value: string | null | undefined) {
+  const normalizedValue = value?.trim()
+
+  return normalizedValue?.length ? normalizedValue : null
+}
+
+function normalizeProfile(profile: AdminProfileResponse): AdminProfile {
+  return {
+    id: profile.id,
+    phoneNumber: profile.phoneNumber,
+    isActive: profile.isActive,
+    role: normalizeOptionalString(profile.role),
+    permissions: normalizePermissions(profile.permissions),
+  }
+}
+
 function clearSession() {
   activeSession = null
   profileRequest = undefined
@@ -149,6 +194,20 @@ function commitAuthResult(result: AdminAuthResult, fallback?: RefreshSession) {
     refreshToken,
     refreshTokenExpiresAt,
   }
+
+  if (result.administrator) {
+    const currentProfile =
+      cachedProfile?.id === result.administrator.id ? cachedProfile : undefined
+
+    updateCachedProfile({
+      id: result.administrator.id,
+      phoneNumber: result.administrator.phoneNumber,
+      isActive: currentProfile?.isActive ?? true,
+      role: normalizeOptionalString(result.administrator.role),
+      permissions: normalizePermissions(result.administrator.permissions),
+    })
+  }
+
   storeRefreshSession({ refreshToken, refreshTokenExpiresAt })
   notifySessionListeners()
 
@@ -183,6 +242,10 @@ export function subscribeToAdminProfile(listener: (profile: AdminProfile | null)
   profileListeners.add(listener)
 
   return () => profileListeners.delete(listener)
+}
+
+export function getCachedAdminProfile() {
+  return cachedProfile ?? null
 }
 
 export function hasActiveAdminSession() {
@@ -318,8 +381,9 @@ export async function authorizedRequest<T>(path: string, init: RequestInit = {})
 export function getAdminProfile() {
   if (cachedProfile) return Promise.resolve(cachedProfile)
 
-  profileRequest ??= authorizedRequest<AdminProfile>('/api/admin/account/profile')
-    .then((profile) => {
+  profileRequest ??= authorizedRequest<AdminProfileResponse>('/api/admin/account/profile')
+    .then((response) => {
+      const profile = normalizeProfile(response)
       updateCachedProfile(profile)
       return profile
     })

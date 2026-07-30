@@ -13,15 +13,17 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 
-import {
-  getAdminProfile,
-  logoutAdmin,
-  subscribeToAdminProfile,
-  type AdminProfile,
-} from '../../api/auth'
+import { logoutAdmin } from '../../api/auth'
 import { ApiError } from '../../api/client'
+import { useAuth } from '../../components/auth/authContext'
+import {
+  ADMIN_PERMISSIONS,
+  getAdminRoleLabel,
+  hasAdminPermission,
+  type AdminPermission,
+} from '../../components/auth/adminPermissions'
 import { Alert, Button, Input } from '../../components/ui'
 import { cn } from '../../utils/cn'
 import { formatPhoneNumber } from '../../utils/phoneNumber'
@@ -48,13 +50,31 @@ interface NavigationItem {
   section?: AdminSection
   href?: string
   disabled?: boolean
+  permission?: AdminPermission
 }
 
 const navigationItems: NavigationItem[] = [
   { label: 'داشبورد', icon: LayoutDashboard, section: 'dashboard', href: '#/admin' },
-  { label: 'مدیریت موجودی', icon: Archive, section: 'products', href: '#/admin/products' },
-  { label: 'کنترل قیمت', icon: CircleDollarSign, href: '#/admin/products' },
-  { label: 'مدیریت محتوا', icon: PanelsTopLeft, section: 'categories', href: '#/categories' },
+  {
+    label: 'مدیریت موجودی',
+    icon: Archive,
+    section: 'products',
+    href: '#/admin/products',
+    permission: ADMIN_PERMISSIONS.manageProducts,
+  },
+  {
+    label: 'کنترل قیمت',
+    icon: CircleDollarSign,
+    href: '#/admin/products',
+    permission: ADMIN_PERMISSIONS.manageProducts,
+  },
+  {
+    label: 'مدیریت محتوا',
+    icon: PanelsTopLeft,
+    section: 'categories',
+    href: '#/categories',
+    permission: ADMIN_PERMISSIONS.manageCategories,
+  },
   { label: 'پشتیبانی', icon: Headphones, section: 'support', href: '#/admin/support' },
   { label: 'تنظیمات پروفایل', icon: Settings, section: 'account', href: '#/admin/account' },
 ]
@@ -67,39 +87,24 @@ function getErrorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : 'خطای پیش‌بینی‌نشده‌ای رخ داد.'
 }
 
-function getProfilePhoneNumber(profile: AdminProfile | null) {
-  const phoneNumber = formatPhoneNumber(profile?.phoneNumber)
+function getProfilePhoneNumber(phoneNumber: string | null | undefined) {
+  const formattedPhoneNumber = formatPhoneNumber(phoneNumber)
 
-  return phoneNumber ?? 'سطح دسترسی کامل'
+  return formattedPhoneNumber ?? 'شماره ثبت نشده'
 }
 
 export function AdminShell({ activeSection, children, search }: AdminShellProps) {
-  const [profile, setProfile] = useState<AdminProfile | null>(null)
+  const { profile } = useAuth()
   const [localSearch, setLocalSearch] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const searchValue = search?.value ?? localSearch
-
-  useEffect(() => {
-    let isActive = true
-    const unsubscribe = subscribeToAdminProfile(setProfile)
-
-    void getAdminProfile()
-      .then((nextProfile) => {
-        if (isActive) setProfile(nextProfile)
-      })
-      .catch((error: unknown) => {
-        if (isActive) setFeedback(getErrorMessage(error))
-      })
-
-    return () => {
-      isActive = false
-      unsubscribe()
-    }
-  }, [])
+  const canManageProducts = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageProducts)
 
   const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!canManageProducts) return
+
     const normalizedSearch = searchValue.trim()
 
     if (search) {
@@ -141,6 +146,9 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
             {navigationItems.map((item) => {
               const Icon = item.icon
               const isActive = item.section === activeSection
+              const isDisabled = item.disabled === true || (
+                item.permission !== undefined && !hasAdminPermission(profile, item.permission)
+              )
 
               return (
                 <button
@@ -148,17 +156,17 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={item.label}
-                  disabled={item.disabled}
-                  title={item.disabled ? 'API این بخش هنوز ارائه نشده است' : item.label}
+                  disabled={isDisabled}
+                  title={isDisabled ? 'سطح دسترسی حساب شما برای این بخش کافی نیست' : item.label}
                   className={cn(
                     'flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 text-right text-base font-normal transition-colors xl:justify-start',
                     isActive
                       ? 'bg-[#293647] text-white'
                       : 'cursor-pointer text-[#293647] hover:bg-[#e5e8eb]',
-                    item.disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent',
+                    isDisabled && 'cursor-not-allowed opacity-45 hover:bg-transparent',
                   )}
                   onClick={() => {
-                    if (item.href) window.location.hash = item.href
+                    if (!isDisabled && item.href) window.location.hash = item.href
                   }}
                 >
                   <Icon aria-hidden="true" className="shrink-0" size={21} strokeWidth={2.2} />
@@ -188,10 +196,14 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
                 aria-label="جستجوی سراسری"
                 className="min-h-[42px] rounded-[20px] border-[#8dabd3] bg-[#f2f4f6] px-4 shadow-none placeholder:text-[#667085] hover:border-[#8dabd3] focus:border-[#8dabd3] focus-visible:ring-2 focus-visible:ring-[#8dabd3]/45"
                 containerClassName="w-full"
-                disabled={search?.disabled}
+                disabled={search?.disabled === true || !canManageProducts}
                 leading={<Search aria-hidden="true" size={19} strokeWidth={2.2} />}
                 normalizeDigits={false}
-                placeholder={search?.placeholder ?? 'جستجوی سراسری…'}
+                placeholder={
+                  canManageProducts
+                    ? search?.placeholder ?? 'جستجوی سراسری…'
+                    : 'جستجوی محصولات برای این سطح دسترسی غیرفعال است'
+                }
                 type="search"
                 value={searchValue}
                 onChange={(event) => {
@@ -217,9 +229,11 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
                 <UserRound aria-hidden="true" size={19} strokeWidth={2.2} />
               </span>
               <div className="hidden min-w-0 text-right sm:block">
-                <p className="m-0 text-sm font-bold text-[#191c1e]">مدیر سیستم</p>
+                <p className="m-0 text-sm font-bold text-[#191c1e]">
+                  {getAdminRoleLabel(profile?.role)}
+                </p>
                 <p className="mb-0 mt-0.5 max-w-40 truncate text-xs font-medium text-[#293647]" dir="ltr">
-                  {getProfilePhoneNumber(profile)}
+                  {getProfilePhoneNumber(profile?.phoneNumber)}
                 </p>
               </div>
               <Button
@@ -249,6 +263,9 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
           {mobileNavigationItems.map((item) => {
             const Icon = item.icon
             const isActive = item.section === activeSection
+            const isDisabled = item.disabled === true || (
+              item.permission !== undefined && !hasAdminPermission(profile, item.permission)
+            )
 
             return (
               <button
@@ -256,12 +273,15 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
                 type="button"
                 aria-current={isActive ? 'page' : undefined}
                 aria-label={item.label}
+                disabled={isDisabled}
+                title={isDisabled ? 'سطح دسترسی حساب شما برای این بخش کافی نیست' : item.label}
                 className={cn(
                   'flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors',
                   isActive ? 'bg-[#293647] text-white' : 'text-[#293647] hover:bg-[#e5e8eb]',
+                  isDisabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
                 )}
                 onClick={() => {
-                  if (item.href) window.location.hash = item.href
+                  if (!isDisabled && item.href) window.location.hash = item.href
                 }}
               >
                 <Icon aria-hidden="true" size={19} strokeWidth={2.2} />

@@ -8,16 +8,16 @@
 - Repository: `https://github.com/AZAX16/Digifan_frontend`
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
-- Working branch: `feat/category-products`
-- Base commit before the current uncommitted storefront work: `75620b0` (`feat(admin): migrate auth to phone and add inventory controls`)
+- Working branch: `feat/admin-page`
+- Base commit before the current uncommitted clearance work: `844e331` (`Merge pull request #8 from AZAX16/feat/category-products`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted category storefront changes described below.
-- Suggested commit message for the current work: `feat(storefront): add category product pages`
+- The working tree intentionally contains the uncommitted admin permission/clearance changes described below.
+- Suggested commit message for the current work: `feat(admin): enforce permission-based access`
 
 The latest supplied OpenAPI document is:
 
 ```text
-C:\Users\ToosArax\.codex\attachments\9ce5672a-ed7b-4247-8bf5-0b91a0654d77\pasted-text.txt
+C:\Users\ToosArax\.codex\attachments\cce440e8-ee78-4b06-a7a0-b7776c089432\pasted-text.txt
 ```
 
 It describes OpenAPI 3.0.1, `DigiFan.Backend.API` version `1.0`. Treat it as the current contract unless the user provides a newer document.
@@ -70,8 +70,8 @@ public                  Favicon and robots.txt
 | Hash route | Access | Implementation state |
 |---|---|---|
 | `#/admin` | Authenticated | Real API-backed dashboard counts; several visual/business metrics remain derived or placeholder |
-| `#/admin/products` | Authenticated | Real product CRUD, filters, moderation, stock controls, and pagination |
-| `#/categories` | Authenticated | Real category CRUD and hierarchy filtering |
+| `#/admin/products` | `catalog.products.manage` | Real product CRUD, filters, moderation, stock controls, and pagination |
+| `#/categories` | `catalog.categories.manage` | Real category CRUD and hierarchy filtering |
 | `#/admin/support` | Authenticated | Polished but entirely mock/local |
 | `#/admin/account` | Authenticated | Real profile, phone change, password change, and logout |
 | `#/ui-kit` | Public | Living component showcase; intentionally backend-free |
@@ -89,6 +89,7 @@ Implemented contract:
 
 - `POST /api/auth/admin/login`
   - Body: `{ phoneNumber, password }`
+  - Authenticated response includes `administrator: { id, phoneNumber, role, permissions }`.
   - Login UI accepts Persian digits, strips common separators, and sends Western digits.
 - `POST /api/auth/admin/2fa/request`
   - Body: `{ twoFactorToken }`
@@ -99,7 +100,7 @@ Implemented contract:
 - `POST /api/auth/admin/logout`
   - Body: `{ refreshToken }`
 - `GET /api/admin/account/profile`
-  - Response: `{ id, phoneNumber, isActive }`
+  - Response: `{ id, phoneNumber, isActive, role, permissions }`
 - `POST /api/admin/account/change-phone-number`
   - Body: `{ newPhoneNumber }`
 - `POST /api/admin/account/change-password`
@@ -114,7 +115,7 @@ Session design:
 - Access tokens refresh shortly before expiry.
 - An authorized request retries once after a 401 and successful refresh.
 - Refresh/profile requests are deduplicated.
-- The admin profile is cached and shared through listeners between `AdminShell` and `AdminAccountPanel`.
+- The admin clearance profile is cached and shared centrally by `AuthProvider` with other profile consumers notified through listeners.
 - Logout clears local auth/profile/query state first, then attempts server revocation.
 - Conditional 2FA must remain: the current OpenAPI still contains both 2FA endpoints and `requiresTwoFactor`.
 
@@ -126,6 +127,40 @@ Phone-number behavior:
 - The backend contract does not document whether canonical values must be `09...`, `+989...`, or something else; backend documentation is still needed.
 
 Admin creation/signup is not available. An administrator must already exist in the backend.
+
+### Clearance and frontend authorization
+
+The OpenAPI exposes role names as free-form strings and does not define the three-role matrix. The frontend therefore uses the backend-issued `permissions` array as the source of truth and never guesses access from a role name.
+
+Known permission claims returned by the live API:
+
+```text
+administration.permissions.manage
+administration.roles.manage
+administration.users.manage
+catalog.brands.manage
+catalog.categories.manage
+catalog.products.manage
+reports.financial.view
+reports.infrastructure.view
+reports.orders.view
+reports.products.view
+reports.reviews.view
+reports.searches.view
+reports.visitors.view
+```
+
+Current UI mapping:
+
+- Product moderation, inventory, price controls, and global product search require `catalog.products.manage`.
+- Category/content management requires `catalog.categories.manage`.
+- Brand dashboard counts require `catalog.brands.manage`; no brand-management page exists yet.
+- Dashboard remains available to every authenticated administrator, but it only calls and renders catalog resources permitted for that account.
+- Support remains available because it is mock/local and has no backend permission contract.
+- Account settings are available to every authenticated administrator.
+- UI Kit and storefront category pages remain public.
+
+Restricted sidebar/mobile options remain visible but disabled with an explanatory tooltip. Direct navigation to a restricted route renders a dedicated access-denied screen and does not mount the protected feature page. This is UX only; backend endpoint authorization remains mandatory.
 
 ## API coverage
 
@@ -214,8 +249,11 @@ The moderation page now:
 - Supports list/search/pagination/category/brand/status/sort filters
 - Supports create/edit/delete/duplicate/publish/unpublish/archive
 - Refetches after mutations so filtered lists and totals remain consistent
+- Loads category/brand options only when the matching catalog permission exists; dependent filters and create/detail-edit controls are disabled otherwise while inventory/status actions remain usable.
 
 The product editor sends inventory values during create/update. Inventory inputs require non-negative int32 values.
+
+The newest contract also adds product variant and image management endpoints under `/api/admin/products/{id}/variants` and `/api/admin/products/{id}/images`. Frontend editors for these endpoints are not implemented yet.
 
 ### Public storefront products
 
@@ -264,6 +302,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Profile retrieval
 - Phone-number change
 - Password change
+- Permission-aware admin navigation, direct-route guards, and dashboard resource loading
 - Product listing/filtering/pagination
 - Product create/edit/delete/duplicate
 - Product publication/status actions
@@ -274,7 +313,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 
 ### Partial or locally derived
 
-- Dashboard product/category/brand totals are real.
+- Dashboard product/category/brand totals are real when the signed-in administrator has the corresponding catalog permission.
 - Dashboard chart is derived from product-status totals, not sales history.
 - Dashboard notices are local text, not notifications from the backend.
 - “مدیریت موجودی” and “کنترل قیمت” navigation both lead to the products screen.
@@ -326,7 +365,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 ## Performance safeguards
 
 - Admin pages and UI Kit are lazy-loaded as separate route chunks.
-- Only the requested protected route is prefetched during session restoration.
+- Unrestricted protected routes may be prefetched during session restoration; clearance-protected chunks are only prefetched after authorization is known.
 - Eager login/app imports avoid pulling UI-kit-only components into the entry bundle.
 - Category and brand requests use short-lived in-memory caching and request deduplication.
 - Shared cache entries are bounded, abort-aware, invalidated after mutations, and cleared on logout.
@@ -334,6 +373,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Category cards use client pagination to reduce DOM work.
 - Dropdown menus have a bounded, scrollable height.
 - Dashboard uses `Promise.allSettled` so partial data can render when one request fails.
+- Dashboard skips product/category/brand requests that the current permission set does not allow, avoiding predictable 403 responses and unnecessary work.
 - Product lists use server pagination.
 - The public category route is lazy-loaded as its own chunk.
 - Storefront images use lazy decoding/loading except the LCP hero image.
@@ -342,11 +382,11 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Vite’s content-hashed assets receive one-year immutable caching on Vercel.
 - Authenticated `/api` responses are configured as private/no-store.
 
-Latest verified production build after the category storefront work:
+Latest verified production build after the clearance work:
 
 ```text
-entry JS:                 214.15 kB raw / 68.22 kB gzip
-CSS:                       63.97 kB raw / 12.46 kB gzip
+entry JS:                 216.65 kB raw / 69.05 kB gzip
+CSS:                       64.60 kB raw / 12.54 kB gzip
 category storefront:      32.17 kB raw / 10.11 kB gzip
 water-pump hero asset:   159.91 kB
 pressure-tank asset:      41.30 kB
@@ -427,7 +467,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-07-30 after the category storefront implementation:
+Verified on 2026-07-30 after the clearance implementation:
 
 ```text
 npm run check: PASS
@@ -437,6 +477,8 @@ Vite build:    PASS
 ```
 
 The public storefront endpoint was also verified through the local Vite proxy. It returned HTTP success and one `electronics` product. Headless Edge visual QA passed at 1440px and a DevTools-emulated 390px viewport; the 390px document measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied test account also passed for dashboard, inventory/moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations still require separate manual verification.
+
+The newest live authentication/profile responses were verified with the supplied test administrator and included role `super-admin` plus the expected permission array. Lower-clearance accounts were not supplied, so disabled-state visual smoke testing for each of the other two roles remains manual; route and API gating are typechecked and production-built.
 
 Before merging/deploying, manually verify in a browser:
 
@@ -451,6 +493,7 @@ Before merging/deploying, manually verify in a browser:
 9. Production Vercel `/api` rewrite.
 10. Both category routes and the Products dropdown.
 11. A real category slug using `?categorySlug=...` after water-pump/accessory products are published.
+12. One account from each lower clearance level: disabled navigation, direct-route denial, and dashboard partial-data behavior.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -481,6 +524,8 @@ Each item is intentionally one line:
 - Replace storefront mock sections as media, rating, availability, taxonomy, cart, technical-attribute, brand-list, and CMS endpoints become available.
 - Move public storefront pages to real server-visible URLs and SSR/SSG before enabling indexing.
 - Create a dedicated brand-management page if brand CRUD should be available to admins.
+- Build administration and report pages for the permission claims that currently have no matching frontend route.
+- Add product variant and image management UI for the new admin product endpoints.
 - Replace the support mock with backend data when endpoints exist.
 - Replace dashboard placeholder/derived business metrics with aggregate APIs.
 - Build dedicated price-control and inventory-history workflows after backend support exists.
@@ -492,6 +537,7 @@ Each item is intentionally one line:
 ## Known contract and implementation cautions
 
 - OpenAPI component schemas contain no `required` arrays even where backend values are non-nullable; validate important fields client-side.
+- Role names and their three-role matrix are not enumerated in OpenAPI; use the issued permission claims and do not hard-code role-name access rules.
 - `GET /api/admin/Brands` has no documented 200 response schema.
 - Admin product `Sort` is an unconstrained string; storefront sort is the only documented enum.
 - The live category GET is paginated while the supplied OpenAPI still shows an array; the frontend deliberately supports both shapes.
@@ -505,15 +551,19 @@ Each item is intentionally one line:
 
 ## Current uncommitted change set
 
-At the time this handoff was written, the current migration changes:
+At the time this handoff was written, the current clearance changes:
 
 ```text
 src/App.tsx
-src/api/categories.ts
-src/assets/storefront/pressure-tank.webp
-src/assets/storefront/water-pump.webp
-src/pages/storefront/CategoryProductsPage.tsx
-src/pages/storefront/categoryProductsData.ts
+src/api/auth.ts
+src/api/client.ts
+src/components/auth/AuthProvider.tsx
+src/components/auth/adminPermissions.ts
+src/components/auth/authContext.ts
+src/pages/admin/AdminAccessDeniedPage.tsx
+src/pages/admin/AdminDashboardPage.tsx
+src/pages/admin/AdminModerationPage.tsx
+src/pages/admin/AdminShell.tsx
 AGENTS.md
 ```
 
