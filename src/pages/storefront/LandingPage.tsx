@@ -5,9 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
-  Cog,
   Factory,
-  Fan,
   Gift,
   Headphones,
   ImageIcon,
@@ -18,7 +16,6 @@ import {
   Menu,
   Phone,
   Search,
-  Settings,
   Share2,
   ShieldCheck,
   ShoppingCart,
@@ -37,6 +34,11 @@ import {
   getStorefrontProducts,
   type StorefrontProductListItem,
 } from '../../api/storefrontProducts'
+import categoryAccessoriesImage from '../../assets/storefront/category-accessories.svg'
+import categoryFanImage from '../../assets/storefront/category-fan.svg'
+import categoryMotorImage from '../../assets/storefront/category-motor.svg'
+import categoryPumpImage from '../../assets/storefront/category-pump.svg'
+import faninoHeroImage from '../../assets/storefront/fanino-industrial-hero.webp'
 import waterPumpImage from '../../assets/storefront/water-pump.webp'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -99,22 +101,26 @@ const categoryCards = [
   {
     title: 'پمپ‌های صنعتی',
     description: 'انواع پمپ‌های سانتریفیوژ و صنعتی',
-    icon: Factory,
+    imageSrc: categoryPumpImage,
+    imageAlt: 'نماد پمپ صنعتی',
   },
   {
     title: 'الکتروموتورها',
     description: 'AC، DC، سروو و گیربکس‌دار',
-    icon: Cog,
+    imageSrc: categoryMotorImage,
+    imageAlt: 'نماد الکتروموتور',
   },
   {
     title: 'فن و تهویه',
     description: 'فن‌های صنعتی و تهویه مطبوع',
-    icon: Fan,
+    imageSrc: categoryFanImage,
+    imageAlt: 'نماد فن صنعتی',
   },
   {
     title: 'تجهیزات جانبی',
     description: 'قطعات یدکی و ملزومات',
-    icon: Settings,
+    imageSrc: categoryAccessoriesImage,
+    imageAlt: 'نماد چرخ‌دنده تجهیزات جانبی',
   },
 ]
 
@@ -918,17 +924,16 @@ export function LandingPage() {
               </button>
             </div>
           </div>
-          <div className="relative flex min-h-64 min-w-0 items-end justify-center overflow-hidden lg:order-2 lg:min-h-0">
-            <div className="absolute inset-x-10 bottom-4 h-10 rounded-full bg-black/45 blur-xl" />
+          <div className="relative flex min-h-64 min-w-0 items-center justify-center overflow-hidden lg:order-2 lg:min-h-0">
             <img
-              src={waterPumpImage}
-              alt="پمپ صنعتی فنینو"
-              width={833}
-              height={627}
+              src={faninoHeroImage}
+              alt="مجموعه پمپ صنعتی فنینو"
+              width={1536}
+              height={1024}
               loading="eager"
               decoding="async"
               fetchPriority="high"
-              className="relative z-10 max-h-[340px] min-w-0 max-w-full object-contain drop-shadow-2xl"
+              className="relative z-10 max-h-[360px] min-w-0 max-w-full object-contain"
             />
           </div>
           <button
@@ -957,28 +962,29 @@ export function LandingPage() {
             onAction={() => showMockNotice('فهرست عمومی دسته‌بندی‌ها')}
           />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {categoryCards.map((category) => {
-              const CategoryIcon = category.icon
-              return (
-                <a
-                  key={category.title}
-                  href="#new-products"
-                  className="group grid min-h-52 place-items-center rounded-[22px] border border-border-soft bg-white p-5 text-center text-ink no-underline shadow-card transition-transform duration-300 hover:-translate-y-1"
-                >
-                  <CategoryIcon
-                    size={68}
-                    strokeWidth={1.5}
-                    className="text-brand-950 transition-colors group-hover:text-accent-500"
-                  />
-                  <div>
-                    <h3 className="m-0 text-base font-black text-brand-950">{category.title}</h3>
-                    <p className="mb-0 mt-2 text-xs font-bold text-muted">
-                      {category.description}
-                    </p>
-                  </div>
-                </a>
-              )
-            })}
+            {categoryCards.map((category) => (
+              <a
+                key={category.title}
+                href="#new-products"
+                className="group grid min-h-52 place-items-center rounded-[22px] border border-border-soft bg-white p-5 text-center text-ink no-underline shadow-card transition-transform duration-300 hover:-translate-y-1"
+              >
+                <img
+                  src={category.imageSrc}
+                  alt={category.imageAlt}
+                  width={96}
+                  height={88}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-[88px] w-24 object-contain transition-transform duration-300 group-hover:scale-105"
+                />
+                <div>
+                  <h3 className="m-0 text-base font-black text-brand-950">{category.title}</h3>
+                  <p className="mb-0 mt-2 text-xs font-bold text-muted">
+                    {category.description}
+                  </p>
+                </div>
+              </a>
+            ))}
           </div>
         </section>
 
