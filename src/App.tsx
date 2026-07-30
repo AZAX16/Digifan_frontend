@@ -2,6 +2,11 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { AuthProvider } from './components/auth/AuthProvider'
 import { useAuth } from './components/auth/authContext'
+import {
+  ADMIN_PERMISSIONS,
+  hasAdminPermission,
+  type AdminPermission,
+} from './components/auth/adminPermissions'
 import { Button } from './components/ui/Button'
 import { AdminAuthPage } from './pages/auth/AdminAuthPage'
 
@@ -15,11 +20,14 @@ const loadAdminCategoriesPage = () =>
   import('./pages/admin/AdminCategoriesPage').then(({ AdminCategoriesPage: Page }) => ({ default: Page }))
 const loadAdminModerationPage = () =>
   import('./pages/admin/AdminModerationPage').then(({ AdminModerationPage: Page }) => ({ default: Page }))
+const loadAdminAccessDeniedPage = () =>
+  import('./pages/admin/AdminAccessDeniedPage').then(({ AdminAccessDeniedPage: Page }) => ({ default: Page }))
 const AdminDashboardPage = lazy(loadAdminDashboardPage)
 const AdminAccountPage = lazy(loadAdminAccountPage)
 const AdminSupportPage = lazy(loadAdminSupportPage)
 const AdminCategoriesPage = lazy(loadAdminCategoriesPage)
 const AdminModerationPage = lazy(loadAdminModerationPage)
+const AdminAccessDeniedPage = lazy(loadAdminAccessDeniedPage)
 const TestUIKit = lazy(() =>
   import('./pages/TestUIKit').then(({ TestUIKit: Page }) => ({ default: Page })),
 )
@@ -46,6 +54,10 @@ const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
   categories: 'مدیریت دسته‌بندی‌ها',
   account: 'تنظیمات پروفایل',
   support: 'مرکز پشتیبانی',
+}
+const protectedPagePermissions: Partial<Record<ProtectedAppPage, AdminPermission>> = {
+  products: ADMIN_PERMISSIONS.manageProducts,
+  categories: ADMIN_PERMISSIONS.manageCategories,
 }
 
 function preloadProtectedPage(page: ProtectedAppPage) {
@@ -87,10 +99,31 @@ function AuthLoadingPage() {
 }
 
 function ProtectedPage({ page }: { page: ProtectedAppPage }) {
-  const { status } = useAuth()
+  const { status, profile, profileStatus } = useAuth()
+  const requiredPermission = protectedPagePermissions[page]
 
   if (status === 'checking') return <AuthLoadingPage />
   if (status === 'anonymous') return <AdminAuthPage />
+  if (requiredPermission && (profileStatus === 'idle' || profileStatus === 'loading')) {
+    return <AuthLoadingPage />
+  }
+  if (requiredPermission && profileStatus === 'error') {
+    return (
+      <AdminAccessDeniedPage
+        activeSection={page}
+        profileUnavailable
+        sectionTitle={authenticatedPageLabels[page]}
+      />
+    )
+  }
+  if (requiredPermission && !hasAdminPermission(profile, requiredPermission)) {
+    return (
+      <AdminAccessDeniedPage
+        activeSection={page}
+        sectionTitle={authenticatedPageLabels[page]}
+      />
+    )
+  }
   if (page === 'dashboard') return <AdminDashboardPage />
   if (page === 'products') return <AdminModerationPage />
   if (page === 'account') return <AdminAccountPage />
@@ -100,7 +133,7 @@ function ProtectedPage({ page }: { page: ProtectedAppPage }) {
 }
 function AppContent() {
   const [page, setPage] = useState<AppPage>(getPageFromHash)
-  const { status } = useAuth()
+  const { status, profile } = useAuth()
   const isUIKit = page === 'ui-kit'
   const isStorefront =
     page === 'storefront-water-pumps' || page === 'storefront-accessories'
@@ -132,10 +165,15 @@ function AppContent() {
   }, [pageLabel])
 
   useEffect(() => {
-    if (status === 'checking' && isProtectedPage) {
-      void preloadProtectedPage(page)
-    }
-  }, [isProtectedPage, page, status])
+    if (!isProtectedPage) return
+
+    const requiredPermission = protectedPagePermissions[page]
+    const canPreload = requiredPermission
+      ? status === 'authenticated' && hasAdminPermission(profile, requiredPermission)
+      : status !== 'anonymous'
+
+    if (canPreload) void preloadProtectedPage(page)
+  }, [isProtectedPage, page, profile, status])
 
   return (
     <div className="min-h-screen">
@@ -164,7 +202,9 @@ function AppContent() {
                   پنل مدیریت
                 </Button>
               )}
-              {page !== 'categories' && status === 'authenticated' && (
+              {page !== 'categories' &&
+                status === 'authenticated' &&
+                hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories) && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -174,7 +214,7 @@ function AppContent() {
                 >
                   دسته‌بندی‌ها
                 </Button>
-              )}
+                )}
               {!isUIKit && (
                 <Button
                   size="sm"

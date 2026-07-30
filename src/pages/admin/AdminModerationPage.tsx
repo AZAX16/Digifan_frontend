@@ -16,6 +16,11 @@ import {
   type ProductPage,
   type ProductStatus,
 } from '../../api/products'
+import { useAuth } from '../../components/auth/authContext'
+import {
+  ADMIN_PERMISSIONS,
+  hasAdminPermission,
+} from '../../components/auth/adminPermissions'
 import {
   Alert,
   Badge,
@@ -139,6 +144,7 @@ function getInitialProductSearch() {
 }
 
 export function AdminModerationPage() {
+  const { profile } = useAuth()
   const [productsPage, setProductsPage] = useState<ProductPage>(EMPTY_PAGE)
   const [categories, setCategories] = useState<Category[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
@@ -151,11 +157,17 @@ export function AdminModerationPage() {
   const [page, setPage] = useState(1)
   const [refreshKey, setRefreshKey] = useState(0)
   const [resolvedRequestKey, setResolvedRequestKey] = useState<string | null>(null)
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true)
+  const [resolvedOptionsKey, setResolvedOptionsKey] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<ProductAction | null>(null)
   const [pendingProductId, setPendingProductId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [editorTarget, setEditorTarget] = useState<ProductEditorTarget | null>(null)
+  const canManageCategories = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories)
+  const canManageBrands = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageBrands)
+  const optionsKey = `${Number(canManageCategories)}:${Number(canManageBrands)}`
+  const isLoadingOptions = resolvedOptionsKey !== optionsKey
+  const canEditProductDetails =
+    canManageCategories && canManageBrands && categories.length > 0 && brands.length > 0
   const requestKey = [page, search, status, categoryId, brandId, sort, refreshKey].join('|')
   const isLoading = resolvedRequestKey !== requestKey
 
@@ -177,23 +189,31 @@ export function AdminModerationPage() {
   useEffect(() => {
     let isActive = true
 
-    void Promise.all([getCategories(), getBrands()])
-      .then(([nextCategories, nextBrands]) => {
+    void Promise.allSettled([
+      canManageCategories ? getCategories() : Promise.resolve([]),
+      canManageBrands ? getBrands() : Promise.resolve([]),
+    ])
+      .then(([categoryResult, brandResult]) => {
         if (!isActive) return
-        setCategories(nextCategories)
-        setBrands(nextBrands)
-      })
-      .catch((error: unknown) => {
-        if (isActive) setFeedback({ variant: 'danger', title: getActionError(error) })
+
+        if (categoryResult.status === 'fulfilled') setCategories(categoryResult.value)
+        if (brandResult.status === 'fulfilled') setBrands(brandResult.value)
+
+        const failedResult = [categoryResult, brandResult].find(
+          (result) => result.status === 'rejected',
+        )
+        if (failedResult?.status === 'rejected') {
+          setFeedback({ variant: 'danger', title: getActionError(failedResult.reason) })
+        }
       })
       .finally(() => {
-        if (isActive) setIsLoadingOptions(false)
+        if (isActive) setResolvedOptionsKey(optionsKey)
       })
 
     return () => {
       isActive = false
     }
-  }, [])
+  }, [canManageBrands, canManageCategories, optionsKey])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -334,7 +354,16 @@ export function AdminModerationPage() {
               </div>
               <Button
                 className="w-full sm:w-auto"
-                disabled={isLoadingOptions || categories.length === 0 || brands.length === 0}
+                disabled={isLoadingOptions || !canEditProductDetails}
+                title={
+                  isLoadingOptions
+                    ? 'در حال دریافت گزینه‌های محصول'
+                    : !canManageCategories || !canManageBrands
+                      ? 'برای افزودن محصول به مجوز مدیریت دسته‌بندی و برند نیاز دارید'
+                      : categories.length === 0 || brands.length === 0
+                        ? 'ابتدا حداقل یک دسته‌بندی و برند تعریف کنید'
+                        : 'افزودن محصول'
+                }
                 variant="secondary"
                 onClick={() => setEditorTarget({ mode: 'create' })}
               >
@@ -344,6 +373,17 @@ export function AdminModerationPage() {
 
             {feedback && (
               <Alert className="mb-5" live title={feedback.title} variant={feedback.variant} />
+            )}
+
+            {(!canManageCategories || !canManageBrands) && (
+              <Alert
+                className="mb-5"
+                title="بخشی از گزینه‌های محصول براساس سطح دسترسی غیرفعال است."
+                variant="warning"
+              >
+                فیلترها و ویرایش جزئیات دسته‌بندی یا برند فقط با مجوزهای مربوط در دسترس هستند؛
+                مدیریت موجودی و وضعیت محصول همچنان فعال است.
+              </Alert>
             )}
 
             <div className="grid items-start gap-5 lg:grid-cols-[256px_minmax(0,1fr)]">
@@ -369,7 +409,7 @@ export function AdminModerationPage() {
                   </fieldset>
                   <div className="h-px bg-border-soft" />
                   <Dropdown
-                    disabled={isLoadingOptions}
+                    disabled={isLoadingOptions || !canManageCategories}
                     label="دسته‌بندی"
                     options={categoryOptions}
                     value={categoryId}
@@ -379,7 +419,7 @@ export function AdminModerationPage() {
                     }}
                   />
                   <Dropdown
-                    disabled={isLoadingOptions}
+                    disabled={isLoadingOptions || !canManageBrands}
                     label="برند"
                     options={brandOptions}
                     value={brandId}
@@ -480,8 +520,13 @@ export function AdminModerationPage() {
                             <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border-soft pt-3 sm:flex sm:flex-wrap">
                               <Button
                                 className="w-full sm:w-auto"
-                                disabled={isProductBusy}
+                                disabled={isProductBusy || !canEditProductDetails}
                                 size="sm"
+                                title={
+                                  canEditProductDetails
+                                    ? 'ویرایش محصول'
+                                    : 'برای ویرایش جزئیات به مجوز مدیریت دسته‌بندی و برند نیاز دارید'
+                                }
                                 variant="outline"
                                 onClick={() => setEditorTarget({ mode: 'edit', product })}
                               >
@@ -595,7 +640,7 @@ export function AdminModerationPage() {
               </section>
             </div>
       </main>
-      {editorTarget && (
+      {editorTarget && (editorTarget.mode === 'inventory' || canEditProductDetails) && (
         <ProductEditorDialog
           key={editorTarget.mode === 'create'
             ? 'create'

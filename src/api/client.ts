@@ -54,6 +54,10 @@ function createRequestSignal(callerSignal: AbortSignal | null | undefined) {
 }
 
 function getErrorMessage(status: number, body: string, contentType: string) {
+  if (status === 403) {
+    return 'سطح دسترسی شما برای انجام این عملیات کافی نیست.'
+  }
+
   const fallback = `درخواست با خطای ${status} روبه‌رو شد.`
 
   if (!body.trim()) return fallback
