@@ -9,10 +9,10 @@
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
 - Working branch: `feat/admin-page`
-- Base commit before the current uncommitted landing work: `87e628d` (`fix(admin): UX design changes`)
+- Base commit before the current uncommitted landing-asset correction: `5128653` (`feat(storefront): add Fanino landing page`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted Fanino landing-page changes described below.
-- Suggested commit message for the current work: `feat(storefront): add Fanino landing page`
+- The working tree intentionally contains the uncommitted Fanino landing-asset correction described below.
+- Suggested commit message for the current work: `fix(storefront): restore transparent landing assets`
 
 The latest supplied OpenAPI document is:
 
@@ -427,7 +427,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Product lists use server pagination.
 - The 24 kB product-assets editor is lazy-loaded as a separate chunk only when an administrator opens it.
 - The public category route is lazy-loaded as its own chunk.
-- The landing page is a separate ~10 kB gzip route chunk and reuses the existing ~160 kB optimized WebP pump hero instead of adding another large raster.
+- The landing page is a separate ~11 kB gzip route chunk; its supplied industrial-pump cutout is a transparent 1536x1024 WebP (~78 kB), and category cards use dedicated transparent silhouette SVGs instead of generic library icons.
 - Storefront images use lazy decoding/loading except the LCP hero image.
 - Generated transparent hero assets are resized alpha WebP files: water pump ~160 kB and pressure tank ~41 kB.
 - Storefront API requests are abortable and stale requests are cancelled when filters change.
@@ -438,11 +438,12 @@ Latest verified production build after the Fanino landing-page work:
 
 ```text
 entry JS:                 217.40 kB raw / 69.37 kB gzip
-CSS:                       73.33 kB raw / 13.77 kB gzip
+CSS:                       74.07 kB raw / 13.92 kB gzip
 admin moderation:         20.35 kB raw /  6.52 kB gzip
 product-assets editor:    24.12 kB raw /  6.73 kB gzip (lazy)
 category storefront:      29.57 kB raw /  9.05 kB gzip
-Fanino landing page:      33.32 kB raw / 10.25 kB gzip (lazy)
+Fanino landing page:      36.81 kB raw / 11.18 kB gzip (lazy)
+Fanino hero cutout:       77.72 kB (1536x1024 alpha WebP)
 water-pump hero asset:   159.91 kB
 pressure-tank asset:      41.30 kB
 ```
@@ -618,12 +619,14 @@ Each item is intentionally one line:
 
 ## Current uncommitted change set
 
-At the time this handoff was written, the current Fanino landing-page changes are:
+At the time this handoff was written, the current Fanino landing-asset correction is:
 
 ```text
-src/App.tsx
-src/api/customerAuth.ts
-src/pages/TestUIKit.tsx
+src/assets/storefront/category-accessories.svg
+src/assets/storefront/category-fan.svg
+src/assets/storefront/category-motor.svg
+src/assets/storefront/category-pump.svg
+src/assets/storefront/fanino-industrial-hero.webp
 src/pages/storefront/LandingPage.tsx
 AGENTS.md
 ```
