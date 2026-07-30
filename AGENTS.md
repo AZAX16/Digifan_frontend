@@ -153,7 +153,8 @@ Admin creation/signup is not available. An administrator must already exist in t
 
 Notes:
 
-- The new contract returns the complete category array; it does not provide pagination or a count endpoint.
+- The live API now returns `{ items, page, pageSize, totalCount, totalPages }`, although the latest supplied OpenAPI still documents a complete array.
+- The client accepts both the legacy array and current paginated shapes, fetches remaining pages for hierarchy editing, and uses `totalCount` for dashboard counts.
 - Category models now include the backend-generated optional `slug`.
 - Lists/details are cached for 60 seconds and invalidated after mutations/logout.
 - Category UI supports create, edit, delete, parent filtering, “no parent,” 20-card client pagination, and prevents choosing self/descendants as a parent.
@@ -354,7 +355,6 @@ pressure-tank asset:      41.30 kB
 Remaining performance bottlenecks:
 
 - Dashboard requires six API requests because no aggregate endpoint exists.
-- Category count requires downloading the complete category list.
 - Very large category sets are still kept fully in memory for hierarchy editing.
 - Backend cold starts/network failures have historically produced slow responses and 502 errors.
 
@@ -436,7 +436,7 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-The public storefront endpoint was also verified through the local Vite proxy. It returned HTTP success and one `electronics` product. Headless Edge visual QA passed at 1440px and a DevTools-emulated 390px viewport; the 390px document measured exactly 390px wide with no horizontal overflow. Authenticated mutations still require a real admin session.
+The public storefront endpoint was also verified through the local Vite proxy. It returned HTTP success and one `electronics` product. Headless Edge visual QA passed at 1440px and a DevTools-emulated 390px viewport; the 390px document measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied test account also passed for dashboard, inventory/moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations still require separate manual verification.
 
 Before merging/deploying, manually verify in a browser:
 
@@ -459,7 +459,7 @@ There is currently no automated test suite. Adding unit tests for phone normaliz
 Each item is intentionally one line:
 
 - **Dashboard aggregate:** Add `GET /api/admin/dashboard/stats` to return all dashboard totals and real business metrics in one response.
-- **Category pagination/count:** Add server pagination and `totalCount` so the frontend does not download every category to show a count.
+- **Category OpenAPI schema:** Update the supplied OpenAPI contract to document the live paginated category response and its `Page`/`PageSize` parameters.
 - **Brand response schema:** Document the successful `GET /api/admin/Brands` response shape in OpenAPI.
 - **Admin product sort enum:** Publish and consistently implement the accepted admin `Sort` values.
 - **Phone format:** Document and validate the canonical admin phone-number format with examples.
@@ -494,7 +494,7 @@ Each item is intentionally one line:
 - OpenAPI component schemas contain no `required` arrays even where backend values are non-nullable; validate important fields client-side.
 - `GET /api/admin/Brands` has no documented 200 response schema.
 - Admin product `Sort` is an unconstrained string; storefront sort is the only documented enum.
-- Category GET returns a complete array with no pagination.
+- The live category GET is paginated while the supplied OpenAPI still shows an array; the frontend deliberately supports both shapes.
 - 2FA still exists in the newest contract; do not remove it based on older API versions.
 - The top-level Bearer security definition appears to apply to auth endpoints unless overridden.
 - Storefront product DTOs currently lack media, ratings, discounts, and stock/availability.
@@ -509,6 +509,7 @@ At the time this handoff was written, the current migration changes:
 
 ```text
 src/App.tsx
+src/api/categories.ts
 src/assets/storefront/pressure-tank.webp
 src/assets/storefront/water-pump.webp
 src/pages/storefront/CategoryProductsPage.tsx
