@@ -1,5 +1,4 @@
 import { authorizedRequest } from './auth'
-import { fetchRemainingPages } from './pagination'
 import { cachedQuery, invalidateQueryPrefix } from './queryCache'
 
 export { ApiError } from './client'
@@ -7,6 +6,7 @@ export { ApiError } from './client'
 export interface Category {
   id: string
   name: string | null
+  slug?: string | null
   description: string | null
   parentCategoryId: string | null
 }
@@ -17,51 +17,19 @@ export interface CategoryInput {
   parentCategoryId: string | null
 }
 
-interface CategoryPage {
-  items: Category[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-}
-
-type CategoriesResponse = Category[] | CategoryPage
 const CATEGORY_LIST_STALE_TIME_MS = 60_000
-const CATEGORY_COUNT_STALE_TIME_MS = 30_000
-
-function getCategoryItems(response: CategoriesResponse) {
-  if (Array.isArray(response)) return response
-  if (Array.isArray(response.items)) return response.items
-
-  throw new TypeError('ساختار پاسخ دسته‌بندی‌ها با قرارداد مورد انتظار سازگار نیست.')
-}
 
 async function fetchCategories(signal?: AbortSignal) {
-  const firstResponse = await authorizedRequest<CategoriesResponse>(
-    '/api/admin/Categories?Page=1&PageSize=100',
+  const response = await authorizedRequest<Category[]>(
+    '/api/admin/Categories',
     { signal },
   )
-  const firstPageItems = getCategoryItems(firstResponse)
 
-  if (Array.isArray(firstResponse) || firstResponse.totalPages <= 1) return firstPageItems
+  if (!Array.isArray(response)) {
+    throw new TypeError('ساختار پاسخ دسته‌بندی‌ها با قرارداد مورد انتظار سازگار نیست.')
+  }
 
-  const remainingPages = await fetchRemainingPages(
-    firstResponse.totalPages,
-    (page) =>
-      authorizedRequest<CategoriesResponse>(
-        `/api/admin/Categories?Page=${page}&PageSize=100`,
-        {
-        signal,
-        },
-      ),
-  )
-  const categoriesById = new Map(
-    [firstResponse, ...remainingPages]
-      .flatMap(getCategoryItems)
-      .map((category) => [category.id, category]),
-  )
-
-  return [...categoriesById.values()]
+  return response
 }
 
 export function getCategories(signal?: AbortSignal) {
@@ -74,19 +42,7 @@ export function getCategories(signal?: AbortSignal) {
 }
 
 export function getCategoryCount(signal?: AbortSignal) {
-  return cachedQuery({
-    key: 'categories:count',
-    staleTimeMs: CATEGORY_COUNT_STALE_TIME_MS,
-    signal,
-    queryFn: async (querySignal) => {
-      const response = await authorizedRequest<CategoriesResponse>(
-        '/api/admin/Categories?Page=1&PageSize=1',
-        { signal: querySignal },
-      )
-
-      return Array.isArray(response) ? response.length : response.totalCount
-    },
-  })
+  return getCategories(signal).then((categories) => categories.length)
 }
 
 export function getCategory(id: string, signal?: AbortSignal) {

@@ -6,8 +6,10 @@ import { ApiError } from '../../api/client'
 import {
   archiveProduct,
   deleteProduct,
+  discontinueProduct,
   duplicateProduct,
   getProducts,
+  markProductOutOfStock,
   publishProduct,
   unpublishProduct,
   type Product,
@@ -29,7 +31,14 @@ import { toPersianDigits } from '../../utils/persianDigits'
 import { ProductEditorDialog, type ProductEditorTarget } from './ProductEditorDialog'
 import { AdminShell } from './AdminShell'
 
-type ProductAction = 'publish' | 'unpublish' | 'archive' | 'duplicate' | 'delete'
+type ProductAction =
+  | 'publish'
+  | 'unpublish'
+  | 'archive'
+  | 'discontinue'
+  | 'outOfStock'
+  | 'duplicate'
+  | 'delete'
 
 interface Feedback {
   variant: 'success' | 'danger'
@@ -249,6 +258,20 @@ export function AdminModerationPage() {
       return
     }
 
+    if (
+      action === 'discontinue' &&
+      !window.confirm(`تولید محصول «${getProductName(product)}» متوقف شود؟`)
+    ) {
+      return
+    }
+
+    if (
+      action === 'outOfStock' &&
+      !window.confirm(`محصول «${getProductName(product)}» ناموجود ثبت شود؟`)
+    ) {
+      return
+    }
+
     setPendingAction(action)
     setPendingProductId(product.id)
     setFeedback(null)
@@ -257,6 +280,8 @@ export function AdminModerationPage() {
       if (action === 'publish') await publishProduct(product.id)
       if (action === 'unpublish') await unpublishProduct(product.id)
       if (action === 'archive') await archiveProduct(product.id)
+      if (action === 'discontinue') await discontinueProduct(product.id)
+      if (action === 'outOfStock') await markProductOutOfStock(product.id)
       if (action === 'duplicate') await duplicateProduct(product.id)
       if (action === 'delete') await deleteProduct(product.id)
 
@@ -269,6 +294,8 @@ export function AdminModerationPage() {
         publish: 'محصول منتشر شد.',
         unpublish: 'انتشار محصول متوقف شد.',
         archive: 'محصول بایگانی شد.',
+        discontinue: 'تولید محصول متوقف شد.',
+        outOfStock: 'محصول ناموجود ثبت شد.',
         duplicate: 'یک نسخه جدید از محصول ساخته شد.',
         delete: 'محصول حذف شد.',
       }
@@ -416,6 +443,7 @@ export function AdminModerationPage() {
                         const statusDetails = getStatusDetails(product.status)
                         const isPending = pendingProductId === product.id
                         const description = product.description?.trim()
+                        const isLowStock = product.stockQuantity <= product.reorderPoint
 
                         return (
                           <article key={product.id} className="min-w-0 rounded-df-md border border-border-soft bg-white p-3 shadow-sm sm:p-4">
@@ -435,6 +463,15 @@ export function AdminModerationPage() {
                                 </p>
                                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
                                   <span>قیمت: <strong className="text-ink">{priceFormatter.format(product.price)} {product.currency ?? ''}</strong></span>
+                                  <span>
+                                    موجودی:{' '}
+                                    <strong className={isLowStock ? 'text-danger-600' : 'text-ink'}>
+                                      {toPersianDigits(String(product.stockQuantity))}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    نقطه سفارش: <strong className="text-ink">{toPersianDigits(String(product.reorderPoint))}</strong>
+                                  </span>
                                   <span>ساخته‌شده: {formatProductDate(product.createdAt)}</span>
                                   {product.slug?.trim() && <span className="break-all" dir="ltr">/{product.slug}</span>}
                                 </div>
@@ -449,6 +486,15 @@ export function AdminModerationPage() {
                                 onClick={() => setEditorTarget({ mode: 'edit', product })}
                               >
                                 ویرایش
+                              </Button>
+                              <Button
+                                className="w-full sm:w-auto"
+                                disabled={isProductBusy}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditorTarget({ mode: 'inventory', product })}
+                              >
+                                موجودی
                               </Button>
                               {isStatus(product, 'active') ? (
                                 <Button
@@ -482,6 +528,32 @@ export function AdminModerationPage() {
                                   onClick={() => void runProductAction(product, 'archive')}
                                 >
                                   بایگانی
+                                </Button>
+                              )}
+                              {!isStatus(product, 'outOfStock') &&
+                                !isStatus(product, 'archived') &&
+                                !isStatus(product, 'discontinued') && (
+                                  <Button
+                                    className="w-full sm:w-auto"
+                                    disabled={isProductBusy}
+                                    loading={isPending && pendingAction === 'outOfStock'}
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => void runProductAction(product, 'outOfStock')}
+                                  >
+                                    ثبت ناموجودی
+                                  </Button>
+                                )}
+                              {!isStatus(product, 'archived') && !isStatus(product, 'discontinued') && (
+                                <Button
+                                  className="w-full sm:w-auto"
+                                  disabled={isProductBusy}
+                                  loading={isPending && pendingAction === 'discontinue'}
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void runProductAction(product, 'discontinue')}
+                                >
+                                  توقف تولید
                                 </Button>
                               )}
                               <Button
@@ -525,7 +597,9 @@ export function AdminModerationPage() {
       </main>
       {editorTarget && (
         <ProductEditorDialog
-          key={editorTarget.mode === 'edit' ? editorTarget.product.id : 'create'}
+          key={editorTarget.mode === 'create'
+            ? 'create'
+            : `${editorTarget.mode}-${editorTarget.product.id}`}
           brands={brands}
           categories={categories}
           target={editorTarget}

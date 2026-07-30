@@ -23,15 +23,28 @@ const AdminModerationPage = lazy(loadAdminModerationPage)
 const TestUIKit = lazy(() =>
   import('./pages/TestUIKit').then(({ TestUIKit: Page }) => ({ default: Page })),
 )
+const CategoryProductsPage = lazy(() =>
+  import('./pages/storefront/CategoryProductsPage').then(({ CategoryProductsPage: Page }) => ({
+    default: Page,
+  })),
+)
 
-type AppPage = 'dashboard' | 'products' | 'categories' | 'support' | 'account' | 'ui-kit'
-type ProtectedAppPage = Exclude<AppPage, 'ui-kit'>
-const authenticatedPageLabels: Record<AppPage, string> = {
+type AppPage =
+  | 'dashboard'
+  | 'products'
+  | 'categories'
+  | 'support'
+  | 'account'
+  | 'ui-kit'
+  | 'storefront-water-pumps'
+  | 'storefront-accessories'
+type PublicAppPage = 'ui-kit' | 'storefront-water-pumps' | 'storefront-accessories'
+type ProtectedAppPage = Exclude<AppPage, PublicAppPage>
+const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
   dashboard: 'پیشخوان مدیریت',
   products: 'مدیریت محصولات',
   categories: 'مدیریت دسته‌بندی‌ها',
   account: 'تنظیمات پروفایل',
-  'ui-kit': 'راهنمای رابط کاربری',
   support: 'مرکز پشتیبانی',
 }
 
@@ -49,6 +62,8 @@ function getPageFromHash(): AppPage {
   const route = window.location.hash.split('?')[0]
 
   if (route === '#/ui-kit') return 'ui-kit'
+  if (route === '#/category/water-pumps') return 'storefront-water-pumps'
+  if (route === '#/category/accessories') return 'storefront-accessories'
   if (route === '#/categories') return 'categories'
   if (route === '#/admin/products') return 'products'
   if (route === '#/admin/account') return 'account'
@@ -87,6 +102,9 @@ function AppContent() {
   const [page, setPage] = useState<AppPage>(getPageFromHash)
   const { status } = useAuth()
   const isUIKit = page === 'ui-kit'
+  const isStorefront =
+    page === 'storefront-water-pumps' || page === 'storefront-accessories'
+  const isProtectedPage = !isUIKit && !isStorefront
   const usesAdminShell =
     status === 'authenticated' &&
     (page === 'dashboard' || page === 'products' || page === 'categories' || page === 'support' || page === 'account')
@@ -98,25 +116,30 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  const pageLabel = isUIKit
-    ? 'راهنمای رابط کاربری'
-    : status === 'authenticated'
-      ? authenticatedPageLabels[page]
-      : 'ورود مدیر'
+  const pageLabel =
+    page === 'storefront-water-pumps'
+      ? 'پمپ آب'
+      : page === 'storefront-accessories'
+        ? 'تجهیزات جانبی'
+        : isUIKit
+          ? 'راهنمای رابط کاربری'
+          : status === 'authenticated'
+            ? authenticatedPageLabels[page]
+            : 'ورود مدیر'
 
   useEffect(() => {
     document.title = `${pageLabel} | DigiFan`
   }, [pageLabel])
 
   useEffect(() => {
-    if (status === 'checking' && page !== 'ui-kit') {
+    if (status === 'checking' && isProtectedPage) {
       void preloadProtectedPage(page)
     }
-  }, [page, status])
+  }, [isProtectedPage, page, status])
 
   return (
     <div className="min-h-screen">
-      {!usesAdminShell && (
+      {!usesAdminShell && !isStorefront && (
         <header
           className="sticky top-0 z-[60] border-b border-border-soft bg-white/95 shadow-sm backdrop-blur"
           dir="rtl"
@@ -169,7 +192,15 @@ function AppContent() {
       )}
 
       <Suspense fallback={<AuthLoadingPage />}>
-        {isUIKit ? <TestUIKit /> : <ProtectedPage page={page} />}
+        {isUIKit ? (
+          <TestUIKit />
+        ) : page === 'storefront-water-pumps' ? (
+          <CategoryProductsPage variant="water-pumps" />
+        ) : page === 'storefront-accessories' ? (
+          <CategoryProductsPage variant="accessories" />
+        ) : (
+          <ProtectedPage page={page} />
+        )}
       </Suspense>
     </div>
   )

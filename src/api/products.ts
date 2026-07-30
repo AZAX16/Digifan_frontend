@@ -20,6 +20,8 @@ export interface Product {
   brandName: string | null
   price: number
   currency: string | null
+  stockQuantity: number
+  reorderPoint: number
   createdAt: string
   updatedAt: string | null
 }
@@ -31,6 +33,13 @@ export interface ProductInput {
   brandId: string
   price: number
   currency: string
+  stockQuantity: number
+  reorderPoint: number
+}
+
+export interface ProductInventoryInput {
+  stockQuantity: number
+  reorderPoint: number
 }
 
 export interface ProductQuery {
@@ -118,6 +127,25 @@ export function unpublishProduct(id: string) {
 export function archiveProduct(id: string) {
   return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/archive`, {
     method: 'POST',
+  })
+}
+
+export function discontinueProduct(id: string) {
+  return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/discontinue`, {
+    method: 'POST',
+  })
+}
+
+export function markProductOutOfStock(id: string) {
+  return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/out-of-stock`, {
+    method: 'POST',
+  })
+}
+
+export function setProductInventory(id: string, input: ProductInventoryInput) {
+  return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/inventory`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
   })
 }
 
