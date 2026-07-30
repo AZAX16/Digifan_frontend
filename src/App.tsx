@@ -4,7 +4,7 @@ import { AuthProvider } from './components/auth/AuthProvider'
 import { useAuth } from './components/auth/authContext'
 import {
   ADMIN_PERMISSIONS,
-  hasAdminPermission,
+  hasAnyAdminPermission,
   type AdminPermission,
 } from './components/auth/adminPermissions'
 import { Button } from './components/ui/Button'
@@ -51,13 +51,13 @@ type ProtectedAppPage = Exclude<AppPage, PublicAppPage>
 const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
   dashboard: 'پیشخوان مدیریت',
   products: 'مدیریت محصولات',
-  categories: 'مدیریت دسته‌بندی‌ها',
+  categories: 'مدیریت محتوا',
   account: 'تنظیمات پروفایل',
   support: 'مرکز پشتیبانی',
 }
-const protectedPagePermissions: Partial<Record<ProtectedAppPage, AdminPermission>> = {
-  products: ADMIN_PERMISSIONS.manageProducts,
-  categories: ADMIN_PERMISSIONS.manageCategories,
+const protectedPagePermissions: Partial<Record<ProtectedAppPage, readonly AdminPermission[]>> = {
+  products: [ADMIN_PERMISSIONS.manageProducts],
+  categories: [ADMIN_PERMISSIONS.manageCategories, ADMIN_PERMISSIONS.manageBrands],
 }
 
 function preloadProtectedPage(page: ProtectedAppPage) {
@@ -116,7 +116,7 @@ function ProtectedPage({ page }: { page: ProtectedAppPage }) {
       />
     )
   }
-  if (requiredPermission && !hasAdminPermission(profile, requiredPermission)) {
+  if (requiredPermission && !hasAnyAdminPermission(profile, requiredPermission)) {
     return (
       <AdminAccessDeniedPage
         activeSection={page}
@@ -169,7 +169,7 @@ function AppContent() {
 
     const requiredPermission = protectedPagePermissions[page]
     const canPreload = requiredPermission
-      ? status === 'authenticated' && hasAdminPermission(profile, requiredPermission)
+      ? status === 'authenticated' && hasAnyAdminPermission(profile, requiredPermission)
       : status !== 'anonymous'
 
     if (canPreload) void preloadProtectedPage(page)
@@ -204,7 +204,10 @@ function AppContent() {
               )}
               {page !== 'categories' &&
                 status === 'authenticated' &&
-                hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories) && (
+                hasAnyAdminPermission(profile, [
+                  ADMIN_PERMISSIONS.manageCategories,
+                  ADMIN_PERMISSIONS.manageBrands,
+                ]) && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -212,7 +215,7 @@ function AppContent() {
                     window.location.hash = '#/categories'
                   }}
                 >
-                  دسته‌بندی‌ها
+                  مدیریت محتوا
                 </Button>
                 )}
               {!isUIKit && (

@@ -272,7 +272,7 @@ export function CategoriesPage() {
   const isBusy = pendingAction !== null
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-8 sm:px-6 lg:py-12" dir="rtl">
+    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-6 lg:py-12" dir="rtl">
       <header className="mb-7">
         <p className="mb-1 text-sm font-bold text-accent-500">نسخه آزمایشی اتصال به API</p>
         <h1 className="m-0 text-2xl font-black text-brand-950 sm:text-3xl">
@@ -292,7 +292,58 @@ export function CategoriesPage() {
         />
       )}
 
-      <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="grid gap-5">
+        <Surface elevation="raised" padding="lg">
+          <h2 className="m-0 text-lg font-black text-brand-950">
+            {editingCategoryId ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی'}
+          </h2>
+          <p className="mb-5 mt-1 text-xs leading-6 text-muted">
+            نام الزامی است؛ توضیحات و دسته‌بندی بالاسری اختیاری هستند.
+          </p>
+
+          <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
+            <Input
+              required
+              disabled={isBusy}
+              label="نام دسته‌بندی"
+              maxLength={120}
+              placeholder="برای مثال: پمپ آب"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+            />
+            <Textarea
+              disabled={isBusy}
+              label="توضیحات"
+              maxLength={500}
+              placeholder="توضیح کوتاهی درباره این دسته‌بندی"
+              value={form.description}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, description: event.target.value }))
+              }
+            />
+            <Dropdown
+              disabled={isBusy}
+              label="دسته‌بندی بالاسری"
+              options={parentOptions}
+              value={form.parentCategoryId}
+              onChange={(parentCategoryId) =>
+                setForm((current) => ({ ...current, parentCategoryId }))
+              }
+            />
+
+            <div className="mt-1 flex flex-wrap gap-2">
+              <Button loading={pendingAction === 'save'} type="submit">
+                {editingCategoryId ? 'ذخیره تغییرات' : 'افزودن دسته‌بندی'}
+              </Button>
+              {editingCategoryId && (
+                <Button disabled={isBusy} variant="ghost" onClick={resetEditor}>
+                  انصراف
+                </Button>
+              )}
+            </div>
+          </form>
+        </Surface>
+
         <Surface elevation="raised" padding="lg">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
@@ -394,57 +445,6 @@ export function CategoriesPage() {
               )}
             </div>
           )}
-        </Surface>
-
-        <Surface elevation="raised" padding="lg">
-          <h2 className="m-0 text-lg font-black text-brand-950">
-            {editingCategoryId ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی'}
-          </h2>
-          <p className="mb-5 mt-1 text-xs leading-6 text-muted">
-            نام الزامی است؛ توضیحات و دسته‌بندی بالاسری اختیاری هستند.
-          </p>
-
-          <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
-            <Input
-              required
-              disabled={isBusy}
-              label="نام دسته‌بندی"
-              maxLength={120}
-              placeholder="برای مثال: پمپ آب"
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            />
-            <Textarea
-              disabled={isBusy}
-              label="توضیحات"
-              maxLength={500}
-              placeholder="توضیح کوتاهی درباره این دسته‌بندی"
-              value={form.description}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, description: event.target.value }))
-              }
-            />
-            <Dropdown
-              disabled={isBusy}
-              label="دسته‌بندی بالاسری"
-              options={parentOptions}
-              value={form.parentCategoryId}
-              onChange={(parentCategoryId) =>
-                setForm((current) => ({ ...current, parentCategoryId }))
-              }
-            />
-
-            <div className="mt-1 flex flex-wrap gap-2">
-              <Button loading={pendingAction === 'save'} type="submit">
-                {editingCategoryId ? 'ذخیره تغییرات' : 'افزودن دسته‌بندی'}
-              </Button>
-              {editingCategoryId && (
-                <Button disabled={isBusy} variant="ghost" onClick={resetEditor}>
-                  انصراف
-                </Button>
-              )}
-            </div>
-          </form>
         </Surface>
       </div>
     </main>

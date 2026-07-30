@@ -21,6 +21,7 @@ import { useAuth } from '../../components/auth/authContext'
 import {
   ADMIN_PERMISSIONS,
   getAdminRoleLabel,
+  hasAnyAdminPermission,
   hasAdminPermission,
   type AdminPermission,
 } from '../../components/auth/adminPermissions'
@@ -50,7 +51,7 @@ interface NavigationItem {
   section?: AdminSection
   href?: string
   disabled?: boolean
-  permission?: AdminPermission
+  permissions?: readonly AdminPermission[]
 }
 
 const navigationItems: NavigationItem[] = [
@@ -60,29 +61,24 @@ const navigationItems: NavigationItem[] = [
     icon: Archive,
     section: 'products',
     href: '#/admin/products',
-    permission: ADMIN_PERMISSIONS.manageProducts,
+    permissions: [ADMIN_PERMISSIONS.manageProducts],
   },
   {
     label: 'کنترل قیمت',
     icon: CircleDollarSign,
     href: '#/admin/products',
-    permission: ADMIN_PERMISSIONS.manageProducts,
+    permissions: [ADMIN_PERMISSIONS.manageProducts],
   },
   {
     label: 'مدیریت محتوا',
     icon: PanelsTopLeft,
     section: 'categories',
     href: '#/categories',
-    permission: ADMIN_PERMISSIONS.manageCategories,
+    permissions: [ADMIN_PERMISSIONS.manageCategories, ADMIN_PERMISSIONS.manageBrands],
   },
   { label: 'پشتیبانی', icon: Headphones, section: 'support', href: '#/admin/support' },
   { label: 'تنظیمات پروفایل', icon: Settings, section: 'account', href: '#/admin/account' },
 ]
-const mobileNavigationItems: NavigationItem[] = [
-  ...navigationItems.filter((item) => item.section !== undefined),
-  { label: 'UI Kit', icon: Wrench, href: '#/ui-kit' },
-]
-
 function getErrorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : 'خطای پیش‌بینی‌نشده‌ای رخ داد.'
 }
@@ -100,10 +96,20 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
   const [feedback, setFeedback] = useState<string | null>(null)
   const searchValue = search?.value ?? localSearch
   const canManageProducts = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageProducts)
+  const visibleNavigationItems = navigationItems.filter(
+    (item) => !item.permissions || hasAnyAdminPermission(profile, item.permissions),
+  )
+  const mobileNavigationItems: NavigationItem[] = [
+    ...visibleNavigationItems.filter((item) => item.section !== undefined),
+    { label: 'UI Kit', icon: Wrench, href: '#/ui-kit' },
+  ]
+  const isSearchDisabled = search
+    ? search.disabled === true
+    : !canManageProducts
 
   const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!canManageProducts) return
+    if (!search && !canManageProducts) return
 
     const normalizedSearch = searchValue.trim()
 
@@ -143,12 +149,10 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
           </div>
 
           <nav aria-label="ناوبری مدیریت" className="grid gap-2">
-            {navigationItems.map((item) => {
+            {visibleNavigationItems.map((item) => {
               const Icon = item.icon
               const isActive = item.section === activeSection
-              const isDisabled = item.disabled === true || (
-                item.permission !== undefined && !hasAdminPermission(profile, item.permission)
-              )
+              const isDisabled = item.disabled === true
 
               return (
                 <button
@@ -196,11 +200,11 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
                 aria-label="جستجوی سراسری"
                 className="min-h-[42px] rounded-[20px] border-[#8dabd3] bg-[#f2f4f6] px-4 shadow-none placeholder:text-[#667085] hover:border-[#8dabd3] focus:border-[#8dabd3] focus-visible:ring-2 focus-visible:ring-[#8dabd3]/45"
                 containerClassName="w-full"
-                disabled={search?.disabled === true || !canManageProducts}
+                disabled={isSearchDisabled}
                 leading={<Search aria-hidden="true" size={19} strokeWidth={2.2} />}
                 normalizeDigits={false}
                 placeholder={
-                  canManageProducts
+                  search || canManageProducts
                     ? search?.placeholder ?? 'جستجوی سراسری…'
                     : 'جستجوی محصولات برای این سطح دسترسی غیرفعال است'
                 }
@@ -258,14 +262,12 @@ export function AdminShell({ activeSection, children, search }: AdminShellProps)
 
         <nav
           aria-label="ناوبری مدیریت موبایل"
-          className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 border-t border-[#dfe2e5] bg-white/95 px-1 pb-2 pt-1 shadow-[0_-6px_20px_rgba(41,54,71,0.1)] backdrop-blur-md sm:hidden"
+          className="fixed inset-x-0 bottom-0 z-50 grid grid-flow-col auto-cols-fr border-t border-[#dfe2e5] bg-white/95 px-1 pb-2 pt-1 shadow-[0_-6px_20px_rgba(41,54,71,0.1)] backdrop-blur-md sm:hidden"
         >
           {mobileNavigationItems.map((item) => {
             const Icon = item.icon
             const isActive = item.section === activeSection
-            const isDisabled = item.disabled === true || (
-              item.permission !== undefined && !hasAdminPermission(profile, item.permission)
-            )
+            const isDisabled = item.disabled === true
 
             return (
               <button

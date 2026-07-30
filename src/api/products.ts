@@ -22,22 +22,21 @@ export interface Product {
   currency: string | null
   stockQuantity: number
   reorderPoint: number
+  hasVariants: boolean
   createdAt: string
   updatedAt: string | null
 }
 
-export interface ProductInput {
+export interface ProductMetadataInput {
   name: string
   description: string | null
   categoryId: string
   brandId: string
-  price: number
-  currency: string
-  stockQuantity: number
-  reorderPoint: number
 }
 
-export interface ProductInventoryInput {
+export interface CreateProductInput extends ProductMetadataInput {
+  price: number
+  currency: string
   stockQuantity: number
   reorderPoint: number
 }
@@ -92,14 +91,14 @@ export function getProduct(id: string, signal?: AbortSignal) {
   return authorizedRequest<Product>(`/api/admin/products/${encodeURIComponent(id)}`, { signal })
 }
 
-export function createProduct(input: ProductInput) {
+export function createProduct(input: CreateProductInput) {
   return authorizedRequest<string>('/api/admin/products', {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
-export function updateProduct(id: string, input: ProductInput) {
+export function updateProduct(id: string, input: ProductMetadataInput) {
   return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(input),
@@ -133,19 +132,6 @@ export function archiveProduct(id: string) {
 export function discontinueProduct(id: string) {
   return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/discontinue`, {
     method: 'POST',
-  })
-}
-
-export function markProductOutOfStock(id: string) {
-  return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/out-of-stock`, {
-    method: 'POST',
-  })
-}
-
-export function setProductInventory(id: string, input: ProductInventoryInput) {
-  return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}/inventory`, {
-    method: 'PUT',
-    body: JSON.stringify(input),
   })
 }
 
