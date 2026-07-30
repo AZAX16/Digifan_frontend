@@ -8,11 +8,11 @@
 - Repository: `https://github.com/AZAX16/Digifan_frontend`
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
-- Working branch: `feat/admin-page`
-- Base commit before the current uncommitted API migration: `ba9793f` (`fix: bug fixes for admin page`)
+- Working branch: `feat/category-products`
+- Base commit before the current uncommitted storefront work: `75620b0` (`feat(admin): migrate auth to phone and add inventory controls`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted phone-authentication and inventory changes described below.
-- Suggested commit message for the current work: `feat(admin): migrate auth to phone and add inventory controls`
+- The working tree intentionally contains the uncommitted category storefront changes described below.
+- Suggested commit message for the current work: `feat(storefront): add category product pages`
 
 The latest supplied OpenAPI document is:
 
@@ -24,7 +24,7 @@ It describes OpenAPI 3.0.1, `DigiFan.Backend.API` version `1.0`. Treat it as the
 
 ## Product and architecture
 
-DigiFan is currently an RTL Persian administration SPA plus a public UI-kit showcase. A public storefront is planned, and a typed client for its newly supplied product endpoints exists, but no storefront screen is routed yet.
+DigiFan is an RTL Persian SPA with an authenticated administration area, a public UI-kit showcase, and two public Figma-derived category storefront pages.
 
 Technology:
 
@@ -44,7 +44,7 @@ Entry flow:
 src/main.tsx
   -> src/App.tsx
       -> AuthProvider
-      -> public UI Kit or protected admin page
+      -> public UI Kit, public category storefront, or protected admin page
       -> lazy-loaded route chunks
 ```
 
@@ -57,6 +57,7 @@ src/components/ui       Reusable UI kit
 src/pages/admin         Dashboard, moderation, account, support, shell
 src/pages/auth          Admin login and conditional 2FA
 src/pages/categories    Category manager
+src/pages/storefront    Reusable public category storefront and page configuration
 src/pages/TestUIKit.tsx Living UI-kit showcase
 src/styles/index.css    Tailwind import, tokens, global RTL-friendly styles
 src/utils               Class names, Persian digits, phone normalization
@@ -74,6 +75,8 @@ public                  Favicon and robots.txt
 | `#/admin/support` | Authenticated | Polished but entirely mock/local |
 | `#/admin/account` | Authenticated | Real profile, phone change, password change, and logout |
 | `#/ui-kit` | Public | Living component showcase; intentionally backend-free |
+| `#/category/water-pumps` | Public | Responsive water-pump storefront; public products API with labeled mock fallbacks |
+| `#/category/accessories` | Public | Responsive accessories storefront; public products API with labeled mock fallbacks |
 | Empty or unknown hash | Protected | Resolves to the admin dashboard/login |
 
 The app uses hash fragments, so Vercel only sees `/`; it cannot distinguish admin and UI-kit routes for server metadata.
@@ -215,7 +218,7 @@ The product editor sends inventory values during create/update. Inventory inputs
 
 ### Public storefront products
 
-`src/api/storefrontProducts.ts` is implemented but not used by a page yet:
+`src/api/storefrontProducts.ts` is consumed by both category storefront routes:
 
 - `GET /api/storefront/products`
 - `GET /api/storefront/products/{slug}`
@@ -246,7 +249,9 @@ Oldest
 
 Do not assume the same enum is valid for the admin product endpoint: its `Sort` parameter remains an unconstrained string in OpenAPI.
 
-The storefront API currently has no routed UI. Its DTOs also contain no image/gallery data, discount data, ratings, or inventory availability, all of which may be required for the Figma storefront cards.
+The pages use the API for product names, summaries, prices, currency, category/brand fields, search, category/brand slug filtering, price filtering, supported sorting, and pagination. Default category slugs are `water-pump` and `accessories`; a test slug can be supplied as `?categorySlug=...` on either hash route.
+
+The live backend check on 2026-07-30 returned one public product under category slug `electronics` and no products for either design slug. Empty/error results therefore render clearly labeled mock cards so the complete Figma layout remains testable without misrepresenting their source.
 
 ## Page maturity: real, partial, and mock
 
@@ -264,6 +269,7 @@ The storefront API currently has no routed UI. Its DTOs also contain no image/ga
 - Product inventory and reorder point editing
 - Category CRUD and hierarchy management
 - UI-kit components and showcase
+- Public storefront product search/filter/supported sort/pagination when matching backend products exist
 
 ### Partial or locally derived
 
@@ -274,13 +280,16 @@ The storefront API currently has no routed UI. Its DTOs also contain no image/ga
 - Inventory has usable per-product controls, but no stock history, adjustment ledger, or bulk workflow.
 - Price editing works per product, but there is no dedicated price-control, history, or bulk-pricing page.
 - Brand API helpers exist without a brand-management page.
-- Storefront API client exists without a storefront route.
+- Storefront category pages are real API-backed for fields/endpoints the contract exposes and fall back to explicitly labeled demo cards when a category is empty or unavailable.
+- Storefront brand choices are derived from the current API page because no public brand-list endpoint exists.
+- `Popular` sorting is intentionally marked demo-only because the backend exposes no popularity/rating sort.
 
 ### Mock
 
 - Support ticket data, search, filters, selection, and replies
 - Dashboard sales/revenue/orders/support/announcement business data
 - Notification bell (disabled)
+- Storefront hero copy/images, subcategory taxonomy, product imagery, ratings, new/discount badges, cart actions, technical filters, promotional banner, brand artwork, service claims, and footer contact content
 
 ## UI kit and design rules
 
@@ -325,16 +334,21 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Dropdown menus have a bounded, scrollable height.
 - Dashboard uses `Promise.allSettled` so partial data can render when one request fails.
 - Product lists use server pagination.
+- The public category route is lazy-loaded as its own chunk.
+- Storefront images use lazy decoding/loading except the LCP hero image.
+- Generated transparent hero assets are resized alpha WebP files: water pump ~160 kB and pressure tank ~41 kB.
+- Storefront API requests are abortable and stale requests are cancelled when filters change.
 - Vite’s content-hashed assets receive one-year immutable caching on Vercel.
 - Authenticated `/api` responses are configured as private/no-store.
 
-Latest verified production build after the phone/inventory migration:
+Latest verified production build after the category storefront work:
 
 ```text
-entry JS:             213.36 kB raw / 67.95 kB gzip
-shared UI chunk:       26.67 kB raw /  8.36 kB gzip
-CSS:                   51.19 kB raw / 10.12 kB gzip
-product admin chunk:   18.82 kB raw /  5.90 kB gzip
+entry JS:                 214.15 kB raw / 68.22 kB gzip
+CSS:                       63.97 kB raw / 12.46 kB gzip
+category storefront:      32.17 kB raw / 10.11 kB gzip
+water-pump hero asset:   159.91 kB
+pressure-tank asset:      41.30 kB
 ```
 
 Remaining performance bottlenecks:
@@ -413,7 +427,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-07-30 after the latest API migration:
+Verified on 2026-07-30 after the category storefront implementation:
 
 ```text
 npm run check: PASS
@@ -422,7 +436,7 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-Read-only live endpoint checks from the Codex execution environment returned connection status `000` for Render because that environment could not establish the HTTPS connection. This does not prove the backend is down; the user previously confirmed the deployed frontend works online. The new authenticated mutations could not be exercised without an admin session.
+The public storefront endpoint was also verified through the local Vite proxy. It returned HTTP success and one `electronics` product. Headless Edge visual QA passed at 1440px and a DevTools-emulated 390px viewport; the 390px document measured exactly 390px wide with no horizontal overflow. Authenticated mutations still require a real admin session.
 
 Before merging/deploying, manually verify in a browser:
 
@@ -435,6 +449,8 @@ Before merging/deploying, manually verify in a browser:
 7. Out-of-stock and discontinue status actions.
 8. Category list/create/edit/delete.
 9. Production Vercel `/api` rewrite.
+10. Both category routes and the Products dropdown.
+11. A real category slug using `?categorySlug=...` after water-pump/accessory products are published.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -461,7 +477,8 @@ Each item is intentionally one line:
 
 ## Frontend work still needed
 
-- Build real public storefront list/detail pages using `src/api/storefrontProducts.ts`.
+- Build the public product-detail page using `getStorefrontProduct`.
+- Replace storefront mock sections as media, rating, availability, taxonomy, cart, technical-attribute, brand-list, and CMS endpoints become available.
 - Move public storefront pages to real server-visible URLs and SSR/SSG before enabling indexing.
 - Create a dedicated brand-management page if brand CRUD should be available to admins.
 - Replace the support mock with backend data when endpoints exist.
@@ -491,19 +508,12 @@ Each item is intentionally one line:
 At the time this handoff was written, the current migration changes:
 
 ```text
-src/api/auth.ts
-src/api/categories.ts
-src/api/products.ts
-src/api/storefrontProducts.ts
-src/components/auth/AdminAccountPanel.tsx
-src/pages/admin/AdminAccountPage.tsx
-src/pages/admin/AdminModerationPage.tsx
-src/pages/admin/AdminShell.tsx
-src/pages/admin/ProductEditorDialog.tsx
-src/pages/auth/AdminAuthPage.tsx
-src/utils/phoneNumber.ts
+src/App.tsx
+src/assets/storefront/pressure-tank.webp
+src/assets/storefront/water-pump.webp
+src/pages/storefront/CategoryProductsPage.tsx
+src/pages/storefront/categoryProductsData.ts
 AGENTS.md
 ```
 
 Do not discard unrelated existing changes. After committing, update this section with the new commit hash and change the working-tree note near the top.
-
