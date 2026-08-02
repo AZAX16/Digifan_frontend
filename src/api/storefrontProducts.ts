@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { normalizePaginatedResponse } from './pageResponse'
 
 export type StorefrontProductSort =
   | 'NameAscending'
@@ -11,6 +12,7 @@ export type StorefrontProductSort =
 export interface StorefrontProductListItem {
   id: string
   name: string | null
+  sku: string | null
   slug: string | null
   summary: string | null
   categoryId: string
@@ -21,18 +23,12 @@ export interface StorefrontProductListItem {
   brandSlug: string | null
   price: number
   currency: string | null
+  stockQuantity: number
+  reorderPoint: number
+  attributes: Record<string, string> | null
   primaryImageUrl: string | null
 }
 
-export interface StorefrontProductVariant {
-  id: string
-  name: string | null
-  sku: string | null
-  price: number
-  currency: string | null
-  stockQuantity: number
-  attributes: Record<string, string> | null
-}
 
 export interface StorefrontProductImage {
   id: string
@@ -40,7 +36,6 @@ export interface StorefrontProductImage {
   altText: string | null
   displayOrder: number
   isPrimary: boolean
-  variantId: string | null
 }
 
 export interface StorefrontProductDetails
@@ -48,7 +43,6 @@ export interface StorefrontProductDetails
   description: string | null
   averageRating: number
   reviewCount: number
-  variants: StorefrontProductVariant[] | null
   images: StorefrontProductImage[] | null
 }
 
@@ -71,10 +65,6 @@ export interface StorefrontProductPage {
   totalPages: number
 }
 
-interface StorefrontProductPageResponse
-  extends Omit<StorefrontProductPage, 'items'> {
-  items: StorefrontProductListItem[] | null
-}
 
 function appendParameter(
   parameters: URLSearchParams,
@@ -100,12 +90,15 @@ export async function getStorefrontProducts(
   appendParameter(parameters, 'MaxPrice', query.maxPrice)
   appendParameter(parameters, 'Sort', query.sort)
   const queryString = parameters.toString()
-  const response = await apiRequest<StorefrontProductPageResponse>(
+  const response = await apiRequest<unknown>(
     `/api/storefront/products${queryString ? `?${queryString}` : ''}`,
     { signal },
   )
 
-  return { ...response, items: response.items ?? [] } satisfies StorefrontProductPage
+  return normalizePaginatedResponse<StorefrontProductListItem>(
+    response,
+    'محصولات فروشگاه',
+  )
 }
 
 export function getStorefrontProduct(slug: string, signal?: AbortSignal) {

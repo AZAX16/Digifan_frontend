@@ -114,10 +114,26 @@ function getStatusDetails(status: TicketStatus): { label: string; variant: Badge
   return { label: 'حل‌شده', variant: 'success' }
 }
 
+type SupportWorkspace = 'tickets' | 'reviews'
+
+function getInitialSupportWorkspace(): SupportWorkspace {
+  const queryString = window.location.hash.split('?')[1] ?? ''
+
+  return new URLSearchParams(queryString).get('workspace') === 'reviews' ? 'reviews' : 'tickets'
+}
+
+function updateSupportWorkspaceHash(workspace: SupportWorkspace) {
+  const nextHash = workspace === 'reviews'
+    ? '#/admin/support?workspace=reviews'
+    : '#/admin/support?workspace=tickets'
+
+  window.history.replaceState(null, '', nextHash)
+}
+
 export function AdminSupportPage() {
   const { profile } = useAuth()
   const canViewReviews = hasAdminPermission(profile, ADMIN_PERMISSIONS.viewReviewReports)
-  const [requestedWorkspace, setRequestedWorkspace] = useState<'tickets' | 'reviews'>('tickets')
+  const [requestedWorkspace, setRequestedWorkspace] = useState<SupportWorkspace>(getInitialSupportWorkspace)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<TicketFilter>('all')
   const [selectedTicketId, setSelectedTicketId] = useState(supportTickets[0].id)
@@ -194,7 +210,10 @@ export function AdminSupportPage() {
                   ? 'border-accent-500 bg-accent-500 text-white'
                   : 'border-[#c4c7ca] bg-white text-[#293647] hover:bg-orange-50',
               )}
-              onClick={() => setRequestedWorkspace('tickets')}
+              onClick={() => {
+                setRequestedWorkspace('tickets')
+                updateSupportWorkspaceHash('tickets')
+              }}
             >
               تیکت‌ها
             </button>
@@ -208,7 +227,10 @@ export function AdminSupportPage() {
                     ? 'border-accent-500 bg-accent-500 text-white'
                     : 'border-[#c4c7ca] bg-white text-[#293647] hover:bg-orange-50',
                 )}
-                onClick={() => setRequestedWorkspace('reviews')}
+                onClick={() => {
+                  setRequestedWorkspace('reviews')
+                  updateSupportWorkspaceHash('reviews')
+                }}
               >
                 نظرات محصولات
               </button>

@@ -1,27 +1,6 @@
 import { authorizedRequest } from './auth'
 import { ApiError } from './client'
 
-export interface ProductVariant {
-  id: string
-  name: string | null
-  sku: string | null
-  price: number
-  currency: string | null
-  stockQuantity: number
-  reorderPoint: number
-  isActive: boolean
-  attributes: Record<string, string> | null
-}
-
-export interface UpsertProductVariantInput {
-  name: string
-  sku: string
-  price: number
-  stockQuantity: number
-  reorderPoint: number
-  isActive: boolean
-  attributes: Record<string, string> | null
-}
 
 export interface ProductImage {
   id: string
@@ -29,7 +8,6 @@ export interface ProductImage {
   altText: string | null
   displayOrder: number
   isPrimary: boolean
-  variantId: string | null
 }
 
 export interface AddProductImageInput {
@@ -37,14 +15,12 @@ export interface AddProductImageInput {
   altText: string | null
   displayOrder: number
   isPrimary: boolean
-  variantId: string | null
 }
 
 export interface UpdateProductImageInput {
   url: string
   altText: string | null
   displayOrder: number
-  variantId: string | null
 }
 
 interface CollectionEnvelope<T> {
@@ -63,42 +39,6 @@ function productPath(productId: string) {
   return `/api/admin/products/${encodeURIComponent(productId)}`
 }
 
-export async function getProductVariants(productId: string, signal?: AbortSignal) {
-  const response = await authorizedRequest<ProductVariant[] | CollectionEnvelope<ProductVariant> | null>(
-    `${productPath(productId)}/variants`,
-    { signal },
-  )
-
-  return normalizeCollection(response, 'تنوع‌های محصول')
-}
-
-export function createProductVariant(productId: string, input: UpsertProductVariantInput) {
-  return authorizedRequest<string>(`${productPath(productId)}/variants`, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
-}
-
-export function updateProductVariant(
-  productId: string,
-  variantId: string,
-  input: UpsertProductVariantInput,
-) {
-  return authorizedRequest<void>(
-    `${productPath(productId)}/variants/${encodeURIComponent(variantId)}`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    },
-  )
-}
-
-export function deleteProductVariant(productId: string, variantId: string) {
-  return authorizedRequest<void>(
-    `${productPath(productId)}/variants/${encodeURIComponent(variantId)}`,
-    { method: 'DELETE' },
-  )
-}
 
 export async function getProductImages(productId: string, signal?: AbortSignal) {
   const response = await authorizedRequest<ProductImage[] | CollectionEnvelope<ProductImage> | null>(

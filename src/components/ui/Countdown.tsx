@@ -80,8 +80,10 @@ function useRemainingSeconds(endsAt: number, initialSeconds: number, autoStart: 
     return showSeconds ? remainingSeconds : Math.ceil(remainingSeconds / 60) * 60
   }, [autoStart, endsAt, initialSeconds, showSeconds])
 
+  const shouldSubscribe = autoStart && initialSeconds > 0 && endsAt > clockNow
+
   return useSyncExternalStore(
-    autoStart ? subscribeToClock : subscribeToStaticClock,
+    shouldSubscribe ? subscribeToClock : subscribeToStaticClock,
     getSnapshot,
     getSnapshot,
   )

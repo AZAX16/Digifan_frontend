@@ -1,4 +1,5 @@
 import { authorizedRequest } from './auth'
+import { normalizePaginatedResponse } from './pageResponse'
 
 export interface ProductReview {
   id: string
@@ -25,9 +26,6 @@ export interface ProductReviewPage {
   totalPages: number
 }
 
-interface ProductReviewPageResponse extends Omit<ProductReviewPage, 'items'> {
-  items: ProductReview[] | null
-}
 
 export interface ProductReviewQuery {
   page?: number
@@ -44,12 +42,12 @@ export async function getAdminReviews(
   if (query.pageSize !== undefined) parameters.set('PageSize', String(query.pageSize))
   if (query.status?.trim()) parameters.set('Status', query.status.trim())
   const queryString = parameters.toString()
-  const response = await authorizedRequest<ProductReviewPageResponse>(
+  const response = await authorizedRequest<unknown>(
     `/api/admin/reviews${queryString ? `?${queryString}` : ''}`,
     { signal },
   )
 
-  return { ...response, items: response.items ?? [] } satisfies ProductReviewPage
+  return normalizePaginatedResponse<ProductReview>(response, 'نظرات محصولات')
 }
 
 export function replyToAdminReview(reviewId: string, reply: string) {

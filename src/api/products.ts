@@ -1,4 +1,5 @@
 import { authorizedRequest } from './auth'
+import { normalizePaginatedResponse } from './pageResponse'
 
 export type ProductStatus =
   | 'draft'
@@ -11,6 +12,7 @@ export type ProductStatus =
 export interface Product {
   id: string
   name: string | null
+  sku: string | null
   slug: string | null
   description: string | null
   status: string | null
@@ -22,23 +24,21 @@ export interface Product {
   currency: string | null
   stockQuantity: number
   reorderPoint: number
-  hasVariants: boolean
+  attributes: Record<string, string> | null
   createdAt: string
   updatedAt: string | null
 }
 
-export interface ProductMetadataInput {
+export interface ProductInput {
   name: string
+  sku: string | null
   description: string | null
   categoryId: string
   brandId: string
-}
-
-export interface CreateProductInput extends ProductMetadataInput {
   price: number
-  currency: string
   stockQuantity: number
   reorderPoint: number
+  attributes: Record<string, string> | null
 }
 
 export interface ProductQuery {
@@ -59,9 +59,6 @@ export interface ProductPage {
   totalPages: number
 }
 
-interface ProductPageResponse extends Omit<ProductPage, 'items'> {
-  items: Product[] | null
-}
 
 function appendParameter(parameters: URLSearchParams, name: string, value: string | number | undefined) {
   if (value === undefined || value === '') return
@@ -79,26 +76,26 @@ export async function getProducts(query: ProductQuery = {}, signal?: AbortSignal
   appendParameter(parameters, 'BrandId', query.brandId)
   appendParameter(parameters, 'Status', query.status)
   const queryString = parameters.toString()
-  const response = await authorizedRequest<ProductPageResponse>(
+  const response = await authorizedRequest<unknown>(
     `/api/admin/products${queryString ? `?${queryString}` : ''}`,
     { signal },
   )
 
-  return { ...response, items: response.items ?? [] } satisfies ProductPage
+  return normalizePaginatedResponse<Product>(response, 'محصولات')
 }
 
 export function getProduct(id: string, signal?: AbortSignal) {
   return authorizedRequest<Product>(`/api/admin/products/${encodeURIComponent(id)}`, { signal })
 }
 
-export function createProduct(input: CreateProductInput) {
+export function createProduct(input: ProductInput) {
   return authorizedRequest<string>('/api/admin/products', {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
-export function updateProduct(id: string, input: ProductMetadataInput) {
+export function updateProduct(id: string, input: ProductInput) {
   return authorizedRequest<void>(`/api/admin/products/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(input),

@@ -7,9 +7,25 @@ import { CategoriesPage } from '../categories'
 import { AdminShell } from './AdminShell'
 import { BrandsManager } from './BrandsManager'
 
+type ContentView = 'categories' | 'brands'
+
+function getInitialContentView(): ContentView {
+  const queryString = window.location.hash.split('?')[1] ?? ''
+
+  return new URLSearchParams(queryString).get('view') === 'brands' ? 'brands' : 'categories'
+}
+
+function updateContentViewHash(view: ContentView) {
+  const nextHash = view === 'brands'
+    ? '#/categories?view=brands'
+    : '#/categories?view=categories'
+
+  window.history.replaceState(null, '', nextHash)
+}
+
 export function AdminCategoriesPage() {
   const { profile } = useAuth()
-  const [requestedView, setRequestedView] = useState<'categories' | 'brands'>('categories')
+  const [requestedView, setRequestedView] = useState<ContentView>(getInitialContentView)
   const canManageCategories = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageCategories)
   const canManageBrands = hasAdminPermission(profile, ADMIN_PERMISSIONS.manageBrands)
   const activeView = requestedView === 'categories' && canManageCategories
@@ -23,24 +39,27 @@ export function AdminCategoriesPage() {
   return (
     <AdminShell activeSection="categories">
       <div className="px-4 pt-5 sm:px-6 lg:px-10">
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#dfe2e5] bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border-2 border-[#dfe2e5] bg-white p-4">
           <div>
             <h1 className="m-0 text-xl font-black text-brand-950">مدیریت محتوا</h1>
             <p className="mb-0 mt-1 text-xs text-muted">دسته‌بندی‌ها و برندهای کاتالوگ</p>
           </div>
-          <div className="flex gap-2" role="tablist" aria-label="بخش مدیریت محتوا">
+          <div className="flex gap-2 pt-1" role="tablist" aria-label="بخش مدیریت محتوا">
             {canManageCategories && (
               <button
                 type="button"
                 role="tab"
                 aria-selected={activeView === 'categories'}
                 className={cn(
-                  'cursor-pointer rounded-lg border px-4 py-2 text-sm font-bold transition-colors',
+                  'cursor-pointer rounded-lg border-2 px-4 py-2 text-sm font-bold transition-colors',
                   activeView === 'categories'
                     ? 'border-accent-500 bg-accent-500 text-white'
                     : 'border-border bg-white text-brand-950 hover:bg-orange-50',
                 )}
-                onClick={() => setRequestedView('categories')}
+                onClick={() => {
+                  setRequestedView('categories')
+                  updateContentViewHash('categories')
+                }}
               >
                 دسته‌بندی‌ها
               </button>
@@ -51,12 +70,15 @@ export function AdminCategoriesPage() {
                 role="tab"
                 aria-selected={activeView === 'brands'}
                 className={cn(
-                  'cursor-pointer rounded-lg border px-4 py-2 text-sm font-bold transition-colors',
+                  'cursor-pointer rounded-lg border-2 px-4 py-2 text-sm font-bold transition-colors',
                   activeView === 'brands'
                     ? 'border-accent-500 bg-accent-500 text-white'
                     : 'border-border bg-white text-brand-950 hover:bg-orange-50',
                 )}
-                onClick={() => setRequestedView('brands')}
+                onClick={() => {
+                  setRequestedView('brands')
+                  updateContentViewHash('brands')
+                }}
               >
                 برندها
               </button>

@@ -1,4 +1,5 @@
 import { authorizedRequest } from './auth'
+import { normalizePaginatedResponse } from './pageResponse'
 import { fetchRemainingPages } from './pagination'
 import { cachedQuery, invalidateQueryPrefix } from './queryCache'
 
@@ -31,13 +32,9 @@ const CATEGORY_LIST_STALE_TIME_MS = 60_000
 const CATEGORY_COUNT_STALE_TIME_MS = 30_000
 
 function getCategoryItems(response: CategoriesResponse) {
-  if (Array.isArray(response)) return response
-
-  if (!response || (response.items !== null && !Array.isArray(response.items))) {
-    throw new TypeError('ساختار پاسخ دسته‌بندی‌ها با قرارداد مورد انتظار سازگار نیست.')
-  }
-
-  return response.items ?? []
+  return Array.isArray(response)
+    ? response
+    : normalizePaginatedResponse<Category>(response, 'دسته‌بندی‌ها').items
 }
 
 async function fetchCategories(signal?: AbortSignal) {
@@ -45,12 +42,13 @@ async function fetchCategories(signal?: AbortSignal) {
     '/api/admin/Categories?Page=1&PageSize=100',
     { signal },
   )
-  const firstPageItems = getCategoryItems(firstResponse)
+  if (Array.isArray(firstResponse)) return firstResponse
 
-  if (Array.isArray(firstResponse) || firstResponse.totalPages <= 1) return firstPageItems
+  const firstPage = normalizePaginatedResponse<Category>(firstResponse, 'دسته‌بندی‌ها')
+  if (firstPage.totalPages <= 1) return firstPage.items
 
   const remainingPages = await fetchRemainingPages(
-    firstResponse.totalPages,
+    firstPage.totalPages,
     (page) =>
       authorizedRequest<CategoriesResponse>(
         `/api/admin/Categories?Page=${page}&PageSize=100`,
@@ -86,7 +84,9 @@ export function getCategoryCount(signal?: AbortSignal) {
         { signal: querySignal },
       )
 
-      return Array.isArray(response) ? response.length : response.totalCount
+      return Array.isArray(response)
+        ? response.length
+        : normalizePaginatedResponse<Category>(response, 'دسته‌بندی‌ها').totalCount
     },
   })
 }

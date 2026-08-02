@@ -114,7 +114,7 @@ export function CategoriesPage() {
 
       return [
         { value: ALL_PARENT_FILTER, label: 'همه دسته‌بندی‌ها' },
-        { value: NO_PARENT_FILTER, label: 'بدون دسته‌بندی بالاسری' },
+        { value: NO_PARENT_FILTER, label: 'دسته‌بندی‌های اصلی' },
         ...categories
           .filter((category) => usedParentIds.has(category.id))
           .map((category) => ({ value: category.id, label: getCategoryLabel(category) })),
@@ -128,7 +128,7 @@ export function CategoriesPage() {
       const unavailableParentIds = getUnavailableParentIds(categories, editingCategoryId)
 
       return [
-        { value: '', label: 'بدون دسته‌بندی بالاسری' },
+        { value: '', label: 'ثبت به‌عنوان دسته‌بندی اصلی' },
         ...categories
           .filter((category) => !unavailableParentIds.has(category.id))
           .map((category) => ({
@@ -298,7 +298,7 @@ export function CategoriesPage() {
             {editingCategoryId ? 'ویرایش دسته‌بندی' : 'افزودن دسته‌بندی'}
           </h2>
           <p className="mb-5 mt-1 text-xs leading-6 text-muted">
-            نام الزامی است؛ توضیحات و دسته‌بندی بالاسری اختیاری هستند.
+            نام الزامی است؛ برای ساخت دسته‌بندی فرعی، انتخاب دسته‌بندی اصلی اختیاری است.
           </p>
 
           <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
@@ -323,7 +323,7 @@ export function CategoriesPage() {
             />
             <Dropdown
               disabled={isBusy}
-              label="دسته‌بندی بالاسری"
+              label="دسته‌بندی اصلی"
               options={parentOptions}
               value={form.parentCategoryId}
               onChange={(parentCategoryId) =>
@@ -369,7 +369,7 @@ export function CategoriesPage() {
 
           <Dropdown
             disabled={isLoading || categories.length === 0 || isBusy}
-            label="فیلتر بر اساس دسته‌بندی بالاسری"
+            label="فیلتر بر اساس دسته‌بندی اصلی"
             options={parentFilterOptions}
             value={parentFilter}
             onChange={(nextParentFilter) => {
@@ -408,9 +408,9 @@ export function CategoriesPage() {
                         : 'توضیحی برای این دسته‌بندی ثبت نشده است.'}
                     </p>
                     <p className="mb-0 mt-3 text-xs text-muted">
-                      دسته‌بندی بالاسری:{' '}
+                      دسته‌بندی اصلی:{' '}
                       <span className="font-bold text-ink">
-                        {parentCategory ? getCategoryLabel(parentCategory) : 'ندارد'}
+                        {parentCategory ? getCategoryLabel(parentCategory) : 'این دسته‌بندی اصلی است'}
                       </span>
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">

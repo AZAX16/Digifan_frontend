@@ -5,14 +5,12 @@ import {
   addProductImage,
   deleteProductImage,
   getProductImages,
-  getProductVariants,
   reorderProductImages,
   setPrimaryProductImage,
   updateProductImage,
   type ProductImage,
-  type ProductVariant,
 } from '../../api/productAssets'
-import { Alert, Badge, Button, Dropdown, Input, Skeleton, Surface, Switch } from '../../components/ui'
+import { Alert, Badge, Button, Input, Skeleton, Surface, Switch } from '../../components/ui'
 import { toPersianDigits } from '../../utils/persianDigits'
 
 interface ProductImagesPanelProps {
@@ -25,7 +23,6 @@ interface ProductImagesPanelProps {
 interface ImageForm {
   url: string
   altText: string
-  variantId: string
   isPrimary: boolean
 }
 
@@ -38,7 +35,6 @@ function createEmptyForm(isFirstImage: boolean): ImageForm {
   return {
     url: '',
     altText: '',
-    variantId: '',
     isPrimary: isFirstImage,
   }
 }
@@ -47,7 +43,6 @@ function imageToForm(image: ProductImage): ImageForm {
   return {
     url: image.url ?? '',
     altText: image.altText ?? '',
-    variantId: image.variantId ?? '',
     isPrimary: image.isPrimary,
   }
 }
@@ -63,13 +58,6 @@ function isValidImageUrl(value: string) {
   } catch {
     return false
   }
-}
-
-function getVariantName(variant: ProductVariant) {
-  const name = variant.name?.trim()
-  const sku = variant.sku?.trim()
-
-  return name?.length ? name : sku?.length ? sku : 'تنوع بدون نام'
 }
 
 function ImagePreview({ url, altText }: { url: string | null; altText: string | null }) {
@@ -103,7 +91,6 @@ export function ProductImagesPanel({
   onProductChanged,
 }: ProductImagesPanelProps) {
   const [images, setImages] = useState<ProductImage[]>([])
-  const [variants, setVariants] = useState<ProductVariant[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -115,41 +102,18 @@ export function ProductImagesPanel({
     () => [...images].sort((first, second) => first.displayOrder - second.displayOrder),
     [images],
   )
-  const variantById = useMemo(
-    () => new Map(variants.map((variant) => [variant.id, variant])),
-    [variants],
-  )
-  const variantOptions = useMemo(
-    () => [
-      { value: '', label: 'تصویر عمومی محصول' },
-      ...variants.map((variant) => ({ value: variant.id, label: getVariantName(variant) })),
-    ],
-    [variants],
-  )
 
   useEffect(() => {
     const abortController = new AbortController()
     let isActive = true
 
-    void Promise.allSettled([
-      getProductImages(productId, abortController.signal),
-      getProductVariants(productId, abortController.signal),
-    ])
-      .then(([imagesResult, variantsResult]) => {
-        if (!isActive) return
-
-        if (imagesResult.status === 'fulfilled') setImages(imagesResult.value)
-        if (variantsResult.status === 'fulfilled') setVariants(variantsResult.value)
-
-        const rejectedResult = [imagesResult, variantsResult].find(
-          (result) => result.status === 'rejected',
-        )
-        if (rejectedResult?.status === 'rejected') {
-          const reason: unknown = rejectedResult.reason
-          if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-            setFeedback({ variant: 'danger', title: getActionError(reason) })
-          }
-        }
+    void getProductImages(productId, abortController.signal)
+      .then((nextImages) => {
+        if (isActive) setImages(nextImages)
+      })
+      .catch((error: unknown) => {
+        if (!isActive || (error instanceof DOMException && error.name === 'AbortError')) return
+        setFeedback({ variant: 'danger', title: getActionError(error) })
       })
       .finally(() => {
         if (isActive) setIsLoading(false)
@@ -204,7 +168,6 @@ export function ProductImagesPanel({
           url,
           altText: altText.length ? altText : null,
           displayOrder: editingImage.displayOrder,
-          variantId: form.variantId.length ? form.variantId : null,
         })
       } else {
         const nextDisplayOrder = orderedImages.reduce(
@@ -216,7 +179,6 @@ export function ProductImagesPanel({
           altText: altText.length ? altText : null,
           displayOrder: nextDisplayOrder,
           isPrimary: images.length === 0 ? true : form.isPrimary,
-          variantId: form.variantId.length ? form.variantId : null,
         })
       }
 
@@ -307,7 +269,7 @@ export function ProductImagesPanel({
             تصاویر محصول
           </h3>
           <p className="mb-0 mt-1 text-sm leading-6 text-muted">
-            تصویر اصلی، ترتیب نمایش و اتصال تصویر به یک تنوع را مدیریت کنید.
+            تصویر اصلی و ترتیب نمایش تصاویر محصول را مدیریت کنید.
           </p>
         </div>
         <Button disabled={isBusy} variant="secondary" onClick={() => openEditor()}>
@@ -347,23 +309,14 @@ export function ProductImagesPanel({
               value={form.url}
               onChange={(event) => setForm({ ...form, url: event.target.value })}
             />
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                disabled={isBusy}
-                label="متن جایگزین تصویر"
-                maxLength={300}
-                placeholder={productName}
-                value={form.altText}
-                onChange={(event) => setForm({ ...form, altText: event.target.value })}
-              />
-              <Dropdown
-                disabled={isBusy}
-                label="اتصال به تنوع"
-                options={variantOptions}
-                value={form.variantId}
-                onChange={(variantId) => setForm({ ...form, variantId })}
-              />
-            </div>
+            <Input
+              disabled={isBusy}
+              label="متن جایگزین تصویر"
+              maxLength={300}
+              placeholder={productName}
+              value={form.altText}
+              onChange={(event) => setForm({ ...form, altText: event.target.value })}
+            />
             {!editingImage && (
               <Switch
                 checked={form.isPrimary}
@@ -399,8 +352,6 @@ export function ProductImagesPanel({
       ) : (
         <div className="grid gap-3">
           {orderedImages.map((image, index) => {
-            const attachedVariant = image.variantId ? variantById.get(image.variantId) : undefined
-
             return (
               <article
                 key={image.id}
@@ -414,9 +365,6 @@ export function ProductImagesPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       {image.isPrimary && <Badge variant="accent">تصویر اصلی</Badge>}
                       <Badge variant="neutral">ترتیب {toPersianDigits(String(index + 1))}</Badge>
-                      <span className="text-xs text-muted">
-                        {attachedVariant ? `تنوع: ${getVariantName(attachedVariant)}` : 'تصویر عمومی'}
-                      </span>
                     </div>
                   </div>
                   <p className="mb-0 mt-3 break-words text-sm font-bold text-brand-950">

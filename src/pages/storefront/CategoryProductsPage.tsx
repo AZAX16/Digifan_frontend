@@ -79,6 +79,7 @@ interface DisplayProduct {
   currency: string
   brandName: string
   brandSlug: string
+  imageSrc?: string
   isMock: boolean
 }
 
@@ -316,12 +317,12 @@ function SubcategoryStrip({
           مشاهده همه
         </button>
       </div>
-      <div className="flex snap-x gap-4 overflow-x-auto pb-2 lg:justify-center">
+      <div className="flex snap-x gap-4 overflow-x-auto pb-2 pt-1 lg:justify-center">
         {config.subcategories.map((subcategory) => (
           <button
             key={subcategory}
             type="button"
-            className="group flex h-[138px] w-[128px] shrink-0 snap-start flex-col items-center justify-center rounded-[26px] border border-[#eeeeee] bg-[#fbfbfb] px-3 text-center transition-[border-color,transform,box-shadow] duration-200 hover:-translate-y-1 hover:border-accent-500 hover:shadow-md"
+            className="group flex h-[138px] w-[128px] shrink-0 snap-start flex-col items-center justify-center rounded-[22px] border-2 border-[#eeeeee] bg-[#fbfbfb] px-3 text-center transition-[border-color,box-shadow] duration-200 hover:border-accent-500 hover:shadow-md"
             onClick={() => onSelect(subcategory)}
           >
             <span className="flex size-12 items-center justify-center rounded-xl text-ink group-hover:text-accent-500">
@@ -367,8 +368,8 @@ function ProductCard({
         )}
       >
         <img
-          src={photoPlaceholder}
-          alt=""
+          src={product.imageSrc ?? photoPlaceholder}
+          alt={product.imageSrc ? product.name : ''}
           width={90}
           height={90}
           loading="lazy"
@@ -595,11 +596,11 @@ function BrandStrip() {
           <ChevronLeft size={19} />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 pt-1 sm:grid-cols-4 lg:grid-cols-8">
         {mockBrands.map((brand, index) => (
           <div
             key={brand.slug}
-            className="flex h-[82px] items-center justify-center rounded-[0_0_18px_18px] bg-white text-center text-xl font-black shadow-[0_4px_4px_rgba(0,0,0,0.2)]"
+            className="flex h-[82px] items-center justify-center rounded-[18px] border-2 border-border-soft bg-white text-center text-xl font-black shadow-[0_4px_4px_rgba(0,0,0,0.14)] transition-colors hover:border-accent-500/70"
             style={{ color: ['#213e7b', '#069d50', '#2973a7', '#009f83'][index % 4] }}
           >
             {brand.name}
@@ -783,6 +784,7 @@ function mapApiProducts(items: StorefrontProductListItem[]): DisplayProduct[] {
     currency: formatCurrencyLabel(item.currency),
     brandName: getTextOrFallback(item.brandName, ''),
     brandSlug: getTextOrFallback(item.brandSlug, ''),
+    imageSrc: getOptionalText(item.primaryImageUrl),
     isMock: false,
   }))
 }
@@ -790,6 +792,11 @@ function mapApiProducts(items: StorefrontProductListItem[]): DisplayProduct[] {
 function getTextOrFallback(value: string | null, fallback: string) {
   const trimmedValue = value?.trim()
   return trimmedValue?.length ? trimmedValue : fallback
+}
+
+function getOptionalText(value: string | null) {
+  const trimmedValue = value?.trim()
+  return trimmedValue?.length ? trimmedValue : undefined
 }
 
 function getCategorySlug(defaultSlug: string) {
@@ -805,6 +812,7 @@ export interface CategoryProductsPageProps {
 export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
   const config = categoryProductsConfigs[variant]
   const productsSectionRef = useRef<HTMLElement>(null)
+  const mockNoticeTimeoutRef = useRef<number | null>(null)
   const [searchDraft, setSearchDraft] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -875,6 +883,15 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
     if (description) description.content = `${config.description}؛ مشاهده و مقایسه محصولات ${config.title}.`
   }, [config])
 
+  useEffect(
+    () => () => {
+      if (mockNoticeTimeoutRef.current !== null) {
+        window.clearTimeout(mockNoticeTimeoutRef.current)
+      }
+    },
+    [],
+  )
+
   const apiProducts = useMemo(() => mapApiProducts(result?.items ?? []), [result])
   const usesMockProducts = !isLoading && apiProducts.length === 0
   const products = usesMockProducts ? makeMockProducts(variant) : apiProducts
@@ -898,6 +915,15 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
     return [...uniqueBrands.values()]
   }, [apiProducts])
 
+  const handleSearchDraftChange = (value: string) => {
+    setSearchDraft(value)
+
+    if (!value.trim() && search) {
+      setSearch('')
+      setPage(1)
+    }
+  }
+
   const submitSearch = () => {
     setSearch(searchDraft.trim())
     setPage(1)
@@ -905,7 +931,13 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
 
   const showMockNotice = (message = 'این تعامل در طرح فعلی نمایشی است و API متناظر ندارد.') => {
     setMockNotice(message)
-    window.setTimeout(() => setMockNotice(''), 3500)
+    if (mockNoticeTimeoutRef.current !== null) {
+      window.clearTimeout(mockNoticeTimeoutRef.current)
+    }
+    mockNoticeTimeoutRef.current = window.setTimeout(() => {
+      setMockNotice('')
+      mockNoticeTimeoutRef.current = null
+    }, 3500)
   }
 
   const scrollToProducts = () => {
@@ -916,7 +948,7 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
     <div id="top" className="min-h-screen overflow-x-hidden bg-[#f7f7f7] text-ink" dir="rtl">
       <StorefrontHeader
         search={searchDraft}
-        onSearchChange={setSearchDraft}
+        onSearchChange={handleSearchDraftChange}
         onSearchSubmit={submitSearch}
       />
 
@@ -966,7 +998,7 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
               <div className={cn('lg:block', mobileFiltersOpen ? 'block' : 'hidden')}>
                 <FiltersPanel
                   search={searchDraft}
-                  onSearchChange={setSearchDraft}
+                  onSearchChange={handleSearchDraftChange}
                   onSearchSubmit={submitSearch}
                   priceRange={priceRange}
                   onPriceRangeChange={setPriceRange}
