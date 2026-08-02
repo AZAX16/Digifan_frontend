@@ -59,7 +59,7 @@ function FieldChrome({
 
 const controlClassName =
   'min-h-11 w-full rounded-df-md border border-border-soft bg-white px-3 text-sm text-ink shadow-sm transition-colors placeholder:text-muted/75 hover:border-border focus:border-brand-950 focus:outline-none focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:bg-[#f0f1f2] disabled:opacity-60'
-const digitCompatibleInputTypes = new Set(['text', 'search', 'tel', 'password'])
+const digitCompatibleInputTypes = new Set(['text', 'search', 'tel'])
 
 function handleDigitChange<T extends HTMLInputElement | HTMLTextAreaElement>(
   event: ChangeEvent<T>,

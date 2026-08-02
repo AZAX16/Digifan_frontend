@@ -7,11 +7,11 @@ import {
   createProduct,
   getProduct,
   updateProduct,
-  type CreateProductInput,
   type Product,
-  type ProductMetadataInput,
+  type ProductInput,
 } from '../../api/products'
 import { Alert, Button, Dropdown, Input, Surface, Textarea } from '../../components/ui'
+import { useDialogLifecycle } from '../../hooks/useDialogLifecycle'
 import { parseNonNegativeInt32, parseNonNegativePrice } from '../../utils/numericInput'
 import { toPersianDigits } from '../../utils/persianDigits'
 
@@ -27,24 +27,43 @@ interface ProductEditorDialogProps {
   onSaved: () => void
 }
 
+interface AttributeRow {
+  id: number
+  key: string
+  value: string
+}
+
 interface ProductForm {
   name: string
+  sku: string
   description: string
   categoryId: string
   brandId: string
   price: string
   stockQuantity: string
   reorderPoint: string
+  attributes: AttributeRow[]
 }
 
-const EMPTY_FORM: ProductForm = {
-  name: '',
-  description: '',
-  categoryId: '',
-  brandId: '',
-  price: '',
-  stockQuantity: '۰',
-  reorderPoint: '۰',
+let attributeRowId = 0
+
+function createAttributeRow(key = '', value = ''): AttributeRow {
+  attributeRowId += 1
+  return { id: attributeRowId, key, value }
+}
+
+function createEmptyForm(): ProductForm {
+  return {
+    name: '',
+    sku: '',
+    description: '',
+    categoryId: '',
+    brandId: '',
+    price: '',
+    stockQuantity: '۰',
+    reorderPoint: '۰',
+    attributes: [],
+  }
 }
 
 function getDisplayValue(value: string | null | undefined, fallback: string) {
@@ -68,12 +87,42 @@ function getActionError(error: unknown) {
 function productToForm(product: Product): ProductForm {
   return {
     name: product.name ?? '',
+    sku: product.sku ?? '',
     description: product.description ?? '',
     categoryId: product.categoryId,
     brandId: product.brandId,
     price: toPersianDigits(String(product.price)),
     stockQuantity: toPersianDigits(String(product.stockQuantity)),
     reorderPoint: toPersianDigits(String(product.reorderPoint)),
+    attributes: Object.entries(product.attributes ?? {}).map(([key, value]) =>
+      createAttributeRow(key, value),
+    ),
+  }
+}
+
+function createAttributes(rows: AttributeRow[]):
+  | { success: true; attributes: Record<string, string> | null }
+  | { success: false; error: string } {
+  const attributes: Record<string, string> = {}
+
+  for (const row of rows) {
+    const key = row.key.trim()
+    const value = row.value.trim()
+
+    if (!key && !value) continue
+    if (!key || !value) {
+      return { success: false, error: 'برای هر ویژگی، نام و مقدار را کامل وارد کنید.' }
+    }
+    if (Object.hasOwn(attributes, key)) {
+      return { success: false, error: `ویژگی «${key}» تکراری است.` }
+    }
+
+    attributes[key] = value
+  }
+
+  return {
+    success: true,
+    attributes: Object.keys(attributes).length ? attributes : null,
   }
 }
 
@@ -85,7 +134,7 @@ export function ProductEditorDialog({
   onSaved,
 }: ProductEditorDialogProps) {
   const [form, setForm] = useState<ProductForm>(() =>
-    target.mode === 'create' ? EMPTY_FORM : productToForm(target.product),
+    target.mode === 'create' ? createEmptyForm() : productToForm(target.product),
   )
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(target.mode !== 'create')
@@ -127,51 +176,48 @@ export function ProductEditorDialog({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const name = form.name.trim()
+    const sku = form.sku.trim()
     const description = form.description.trim()
+    const price = parseNonNegativePrice(form.price)
+    const stockQuantity = parseNonNegativeInt32(form.stockQuantity)
+    const reorderPoint = parseNonNegativeInt32(form.reorderPoint)
+    const attributesResult = createAttributes(form.attributes)
+
     if (!name || !form.categoryId || !form.brandId) {
       setFeedback('نام، دسته‌بندی و برند محصول الزامی هستند.')
       return
     }
+    if (price === null) {
+      setFeedback('قیمت معتبر و نامنفی وارد کنید.')
+      return
+    }
+    if (stockQuantity === null || reorderPoint === null) {
+      setFeedback('موجودی و نقطه سفارش باید عدد صحیح و نامنفی باشند.')
+      return
+    }
+    if (!attributesResult.success) {
+      setFeedback(attributesResult.error)
+      return
+    }
 
-    const metadataInput: ProductMetadataInput = {
+    const input: ProductInput = {
       name,
+      sku: sku.length ? sku : null,
       description: description.length ? description : null,
       categoryId: form.categoryId,
       brandId: form.brandId,
+      price,
+      stockQuantity,
+      reorderPoint,
+      attributes: attributesResult.attributes,
     }
 
     setIsSaving(true)
     setFeedback(null)
 
     try {
-      if (target.mode === 'edit') {
-        await updateProduct(target.product.id, metadataInput)
-      } else {
-        const price = parseNonNegativePrice(form.price)
-        const stockQuantity = parseNonNegativeInt32(form.stockQuantity)
-        const reorderPoint = parseNonNegativeInt32(form.reorderPoint)
-
-        if (price === null) {
-          setFeedback('قیمت معتبر وارد کنید.')
-          setIsSaving(false)
-          return
-        }
-        if (stockQuantity === null || reorderPoint === null) {
-          setFeedback('موجودی و نقطه سفارش باید عدد صحیح و نامنفی باشند.')
-          setIsSaving(false)
-          return
-        }
-
-        const input: CreateProductInput = {
-          ...metadataInput,
-          price,
-          currency: 'تومان',
-          stockQuantity,
-          reorderPoint,
-        }
-
-        await createProduct(input)
-      }
+      if (target.mode === 'edit') await updateProduct(target.product.id, input)
+      else await createProduct(input)
 
       onSaved()
     } catch (error) {
@@ -181,65 +227,7 @@ export function ProductEditorDialog({
   }
 
   const isBusy = isLoadingDetails || isSaving
-  const isBusyRef = useRef(isBusy)
-
-  useEffect(() => {
-    isBusyRef.current = isBusy
-  }, [isBusy])
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    const previousBodyOverflow = document.body.style.overflow
-    const focusableSelector = [
-      'button:not([disabled])',
-      'input:not([disabled])',
-      'textarea:not([disabled])',
-      '[tabindex]:not([tabindex="-1"])',
-    ].join(',')
-
-    document.body.style.overflow = 'hidden'
-    const focusFrame = requestAnimationFrame(() => {
-      dialog?.querySelector<HTMLElement>(focusableSelector)?.focus()
-      if (!dialog?.contains(document.activeElement)) dialog?.focus()
-    })
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (!isBusyRef.current) onClose()
-        return
-      }
-      if (event.key !== 'Tab' || !dialog) return
-
-      const focusableElements = [...dialog.querySelectorAll<HTMLElement>(focusableSelector)]
-      if (focusableElements.length === 0) {
-        event.preventDefault()
-        dialog.focus()
-        return
-      }
-
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements.at(-1)
-      if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault()
-        lastElement?.focus()
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault()
-        firstElement?.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      cancelAnimationFrame(focusFrame)
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = previousBodyOverflow
-      previouslyFocused?.focus()
-    }
-  }, [onClose])
+  useDialogLifecycle(dialogRef, onClose, { closeDisabled: isBusy })
 
   useEffect(() => {
     if (!isBusy && document.activeElement === dialogRef.current) {
@@ -253,7 +241,7 @@ export function ProductEditorDialog({
         ref={dialogRef}
         tabIndex={-1}
         aria-labelledby="product-editor-title"
-        className="mx-auto max-w-2xl"
+        className="mx-auto max-w-3xl"
         elevation="raised"
         padding="lg"
         role="dialog"
@@ -261,9 +249,7 @@ export function ProductEditorDialog({
       >
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-border-soft pb-4">
           <div>
-            <p className="m-0 text-xs font-bold text-accent-500">
-              مدیریت محتوای محصول
-            </p>
+            <p className="m-0 text-xs font-bold text-accent-500">مدیریت محتوای محصول</p>
             <h2 id="product-editor-title" className="mb-0 mt-1 text-xl font-black text-brand-950">
               {target.mode === 'edit' ? 'ویرایش محصول' : 'افزودن محصول'}
             </h2>
@@ -276,21 +262,31 @@ export function ProductEditorDialog({
         {feedback && <Alert className="mb-5" live title={feedback} variant="danger" />}
 
         {target.mode === 'edit' && (
-          <Alert className="mb-5" title="ویرایش مطابق قرارداد جدید API" variant="info">
-            در حال حاضر فقط نام، توضیحات، دسته‌بندی و برند قابل ویرایش هستند. قیمت و موجودی
-            مدل‌ها را از بخش «تنوع‌ها و تصاویر» همان محصول مدیریت کنید.
+          <Alert className="mb-5" title="ویرایش کامل مطابق API جدید" variant="info">
+            شناسه کالا، قیمت، موجودی، نقطه سفارش و ویژگی‌های پایه اکنون همراه اطلاعات محصول قابل ویرایش هستند.
           </Alert>
         )}
 
         <form className="grid gap-4" onSubmit={(event) => void handleSubmit(event)}>
-          <Input
-            required
-            disabled={isBusy}
-            label="نام محصول"
-            maxLength={160}
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              required
+              disabled={isBusy}
+              label="نام محصول"
+              maxLength={160}
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+            />
+            <Input
+              disabled={isBusy}
+              label="شناسه کالا (SKU)"
+              maxLength={120}
+              normalizeDigits={false}
+              placeholder="PMP-100"
+              value={form.sku}
+              onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
+            />
+          </div>
           <Textarea
             disabled={isBusy}
             label="توضیحات"
@@ -318,8 +314,7 @@ export function ProductEditorDialog({
               onChange={(brandId) => setForm((current) => ({ ...current, brandId }))}
             />
           </div>
-          {target.mode === 'create' && (
-            <>
+          <div className="grid gap-4 sm:grid-cols-3">
             <Input
               required
               disabled={isBusy}
@@ -329,7 +324,6 @@ export function ProductEditorDialog({
               value={form.price}
               onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
             />
-          <div className="grid gap-4 sm:grid-cols-2">
             <Input
               required
               disabled={isBusy}
@@ -353,8 +347,84 @@ export function ProductEditorDialog({
               }
             />
           </div>
-            </>
-          )}
+
+          <div className="rounded-df-md border border-border-soft bg-canvas/55 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="m-0 text-sm font-black text-brand-950">ویژگی‌های محصول</h3>
+                <p className="mb-0 mt-1 text-xs text-muted">مثل توان: یک اسب یا ولتاژ: ۲۲۰ ولت</p>
+              </div>
+              <Button
+                disabled={isBusy || form.attributes.length >= 20}
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    attributes: [...current.attributes, createAttributeRow()],
+                  }))
+                }
+              >
+                افزودن ویژگی
+              </Button>
+            </div>
+
+            {form.attributes.length === 0 ? (
+              <p className="mb-0 mt-4 text-sm text-muted">ویژگی اختصاصی ثبت نشده است.</p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {form.attributes.map((attribute, index) => (
+                  <div key={attribute.id} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                    <Input
+                      aria-label={`نام ویژگی ${index + 1}`}
+                      disabled={isBusy}
+                      maxLength={80}
+                      placeholder="نام ویژگی"
+                      value={attribute.key}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          attributes: current.attributes.map((item) =>
+                            item.id === attribute.id ? { ...item, key: event.target.value } : item,
+                          ),
+                        }))
+                      }
+                    />
+                    <Input
+                      aria-label={`مقدار ویژگی ${index + 1}`}
+                      disabled={isBusy}
+                      maxLength={160}
+                      placeholder="مقدار"
+                      value={attribute.value}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          attributes: current.attributes.map((item) =>
+                            item.id === attribute.id ? { ...item, value: event.target.value } : item,
+                          ),
+                        }))
+                      }
+                    />
+                    <Button
+                      className="md:self-center"
+                      disabled={isBusy}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          attributes: current.attributes.filter((item) => item.id !== attribute.id),
+                        }))
+                      }
+                    >
+                      حذف ردیف
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="mt-2 flex flex-wrap gap-2">
             <Button loading={isSaving} type="submit">
               {target.mode === 'edit' ? 'ذخیره تغییرات' : 'ساخت محصول'}

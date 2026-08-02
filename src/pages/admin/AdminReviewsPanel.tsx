@@ -89,6 +89,7 @@ export function AdminReviewsPanel() {
     }
   }, [page, refreshKey, requestKey])
 
+
   const handleReply = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const normalizedReply = reply.trim()
@@ -213,7 +214,11 @@ export function AdminReviewsPanel() {
               className="border-t border-[#e0e3e5] p-4"
               page={page}
               pageCount={result.totalPages}
-              onPageChange={setPage}
+              onPageChange={(nextPage) => {
+                setSelectedReviewId(null)
+                setReply('')
+                setPage(nextPage)
+              }}
             />
           )}
         </Surface>

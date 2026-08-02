@@ -1,4 +1,5 @@
 import { authorizedRequest } from './auth'
+import { normalizePaginatedResponse } from './pageResponse'
 import { fetchRemainingPages } from './pagination'
 import { cachedQuery, invalidateQueryPrefix } from './queryCache'
 
@@ -21,9 +22,9 @@ const BRAND_LIST_STALE_TIME_MS = 60_000
 const BRAND_COUNT_STALE_TIME_MS = 30_000
 
 function getBrandItems(response: BrandsResponse) {
-  if (Array.isArray(response)) return response
-
-  return response.items ?? []
+  return Array.isArray(response)
+    ? response
+    : normalizePaginatedResponse<Brand>(response, 'برندها').items
 }
 
 async function fetchBrands(signal?: AbortSignal) {
@@ -31,12 +32,13 @@ async function fetchBrands(signal?: AbortSignal) {
     '/api/admin/Brands?Page=1&PageSize=100',
     { signal },
   )
-  const firstPageItems = getBrandItems(firstResponse)
+  if (Array.isArray(firstResponse)) return firstResponse
 
-  if (Array.isArray(firstResponse) || firstResponse.totalPages <= 1) return firstPageItems
+  const firstPage = normalizePaginatedResponse<Brand>(firstResponse, 'برندها')
+  if (firstPage.totalPages <= 1) return firstPage.items
 
   const remainingPages = await fetchRemainingPages(
-    firstResponse.totalPages,
+    firstPage.totalPages,
     (page) =>
       authorizedRequest<BrandsResponse>(
         `/api/admin/Brands?Page=${page}&PageSize=100`,
@@ -72,7 +74,9 @@ export function getBrandCount(signal?: AbortSignal) {
         { signal: querySignal },
       )
 
-      return Array.isArray(response) ? response.length : response.totalCount
+      return Array.isArray(response)
+        ? response.length
+        : normalizePaginatedResponse<Brand>(response, 'برندها').totalCount
     },
   })
 }

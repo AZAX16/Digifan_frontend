@@ -45,6 +45,7 @@ import { Button } from '../../components/ui/Button'
 import { DiscountProductCard } from '../../components/ui/DiscountProductCard'
 import { Input } from '../../components/ui/Field'
 import { ProductCard } from '../../components/ui/ProductCard'
+import { useDialogLifecycle } from '../../hooks/useDialogLifecycle'
 import { cn } from '../../utils/cn'
 import { toPersianDigits } from '../../utils/persianDigits'
 import { isValidPhoneNumber, normalizePhoneNumber } from '../../utils/phoneNumber'
@@ -157,9 +158,12 @@ function formatCurrency(currency: string | null | undefined) {
   return currency ?? 'تومان'
 }
 
+const landingPriceFormatter = new Intl.NumberFormat('fa-IR')
+
 function formatPrice(value: number, currency = 'تومان') {
-  return `${new Intl.NumberFormat('fa-IR').format(value)} ${formatCurrency(currency)}`
+  return `${landingPriceFormatter.format(value)} ${formatCurrency(currency)}`
 }
+
 
 function mapApiProduct(product: StorefrontProductListItem): LandingProduct {
   const name = product.name?.trim()
@@ -191,16 +195,8 @@ function CustomerAuthDialog({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, open])
+  const dialogRef = useRef<HTMLElement>(null)
+  useDialogLifecycle(dialogRef, onClose, { open, closeDisabled: submitting })
 
   if (!open) return null
 
@@ -247,10 +243,12 @@ function CustomerAuthDialog({
       className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-950/55 p-4 backdrop-blur-sm"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget && !submitting) onClose()
       }}
     >
       <section
+        ref={dialogRef}
+        tabIndex={-1}
         aria-labelledby="customer-auth-title"
         aria-modal="true"
         className="relative w-full max-w-md rounded-[26px] bg-white p-5 shadow-2xl sm:p-7"
@@ -260,7 +258,8 @@ function CustomerAuthDialog({
         <button
           type="button"
           aria-label="بستن پنجره ورود"
-          className="absolute left-4 top-4 flex size-9 items-center justify-center rounded-full border border-border-soft bg-surface text-brand-950"
+          className="absolute left-4 top-4 flex size-9 items-center justify-center rounded-full border border-border-soft bg-surface text-brand-950 disabled:cursor-wait disabled:opacity-60"
+          disabled={submitting}
           onClick={onClose}
         >
           <X size={19} />
@@ -282,8 +281,9 @@ function CustomerAuthDialog({
             <button
               key={item}
               type="button"
+              disabled={submitting}
               className={cn(
-                'min-h-10 rounded-lg text-sm font-black transition-colors',
+                'min-h-10 rounded-lg text-sm font-black transition-colors disabled:cursor-wait',
                 mode === item ? 'bg-white text-brand-950 shadow-sm' : 'text-muted',
               )}
               onClick={() => {
@@ -298,7 +298,9 @@ function CustomerAuthDialog({
 
         <form className="mt-5 grid gap-4" onSubmit={(event) => void submit(event)}>
           <Input
+            data-dialog-initial-focus
             autoComplete="tel"
+            disabled={submitting}
             inputMode="tel"
             label="شماره موبایل"
             placeholder="۰۹۱۲۱۲۳۴۵۶۷"
@@ -307,6 +309,7 @@ function CustomerAuthDialog({
           />
           <Input
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            disabled={submitting}
             label="رمز عبور"
             type="password"
             value={password}
@@ -315,6 +318,7 @@ function CustomerAuthDialog({
           {mode === 'register' && (
             <Input
               autoComplete="new-password"
+              disabled={submitting}
               label="تکرار رمز عبور"
               type="password"
               value={confirmPassword}
@@ -348,6 +352,9 @@ function CartDrawer({
   onQuantityChange: (id: string, quantity: number) => void
   onCheckout: () => void
 }) {
+  const dialogRef = useRef<HTMLElement>(null)
+  useDialogLifecycle(dialogRef, onClose, { open })
+
   if (!open) return null
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -361,6 +368,8 @@ function CartDrawer({
       }}
     >
       <aside
+        ref={dialogRef}
+        tabIndex={-1}
         aria-label="سبد خرید نمایشی"
         aria-modal="true"
         className="mr-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl"
@@ -394,7 +403,15 @@ function CartDrawer({
                 <li key={item.id} className="flex gap-3 rounded-2xl border border-border-soft p-3">
                   <span className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-canvas text-muted">
                     {item.imageSrc ? (
-                      <img src={item.imageSrc} alt="" className="max-h-14 max-w-14 object-contain" />
+                      <img
+                        src={item.imageSrc}
+                        alt=""
+                        width={56}
+                        height={56}
+                        loading="lazy"
+                        decoding="async"
+                        className="max-h-14 max-w-14 object-contain"
+                      />
                     ) : (
                       <ImageIcon size={26} />
                     )}
@@ -779,6 +796,7 @@ function StorefrontFooter() {
 export function LandingPage() {
   const [searchDraft, setSearchDraft] = useState('')
   const [search, setSearch] = useState('')
+  const [productRequestVersion, setProductRequestVersion] = useState(0)
   const [apiProducts, setApiProducts] = useState<LandingProduct[]>([])
   const [productStatus, setProductStatus] = useState<ProductLoadStatus>('loading')
   const [profile, setProfile] = useState<CustomerProfile | null>(null)
@@ -820,7 +838,7 @@ export function LandingPage() {
       })
 
     return () => controller.abort()
-  }, [search])
+  }, [productRequestVersion, search])
 
   useEffect(() => {
     if (!notice) return
@@ -835,9 +853,26 @@ export function LandingPage() {
   const productSource: 'api' | 'mock' = apiProducts.length ? 'api' : 'mock'
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
+  const handleSearchDraftChange = (value: string) => {
+    setSearchDraft(value)
+
+    if (!value.trim() && search) {
+      setApiProducts([])
+      setProductStatus('loading')
+      setSearch('')
+    }
+  }
+
   const submitSearch = () => {
+    const nextSearch = searchDraft.trim()
+
+    setApiProducts([])
     setProductStatus('loading')
-    setSearch(searchDraft.trim())
+    if (nextSearch === search) {
+      setProductRequestVersion((version) => version + 1)
+    } else {
+      setSearch(nextSearch)
+    }
     window.requestAnimationFrame(() => {
       productsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -876,7 +911,7 @@ export function LandingPage() {
     <div id="top" className="min-h-screen overflow-x-hidden bg-[#fafafa] text-ink" dir="rtl">
       <LandingHeader
         search={searchDraft}
-        onSearchChange={setSearchDraft}
+        onSearchChange={handleSearchDraftChange}
         onSearchSubmit={submitSearch}
         profile={profile}
         restoringProfile={restoringProfile}
@@ -886,9 +921,9 @@ export function LandingPage() {
         onCartOpen={() => setCartOpen(true)}
       />
 
-      <main className="mx-auto max-w-[1360px] px-3 py-4 sm:px-5 lg:px-6">
+      <main className="mx-auto max-w-[1360px] px-2.5 py-3 sm:px-5 sm:py-4 lg:px-6">
         <section
-          className="relative isolate grid min-h-[390px] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[26px] bg-[#061b30] px-6 text-white sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:px-16"
+          className="relative isolate grid min-h-[350px] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[22px] bg-[#061b30] px-4 text-white sm:min-h-[390px] sm:rounded-[26px] sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:px-16"
           style={{
             backgroundImage:
               'radial-gradient(circle at 25% 45%, #245273 0, #0b2943 36%, #061b30 72%)',
@@ -896,7 +931,7 @@ export function LandingPage() {
         >
           <div className="relative z-10 flex min-w-0 flex-col items-start justify-center py-10 text-right lg:order-1">
             <DataSourcePill source="mock" />
-            <h1 className="mb-0 mt-5 max-w-xl text-4xl font-black leading-[1.35] sm:text-5xl">
+            <h1 className="mb-0 mt-4 max-w-xl text-3xl font-black leading-[1.35] sm:mt-5 sm:text-5xl">
               راهکارهای مطمئن
               <br />
               برای صنایع پیشرو
@@ -933,7 +968,7 @@ export function LandingPage() {
               loading="eager"
               decoding="async"
               fetchPriority="high"
-              className="relative z-10 max-h-[360px] min-w-0 max-w-full object-contain"
+              className="relative z-10 max-h-[300px] min-w-0 max-w-full object-contain sm:max-h-[360px]"
             />
           </div>
           <button
@@ -954,19 +989,19 @@ export function LandingPage() {
           </button>
         </section>
 
-        <section className="mt-8">
+        <section className="mt-6 sm:mt-8">
           <SectionHeading
             title="دسته‌بندی محصولات"
             source="mock"
             action="مشاهده همه دسته‌بندی‌ها"
             onAction={() => showMockNotice('فهرست عمومی دسته‌بندی‌ها')}
           />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 pt-1 sm:gap-4 lg:grid-cols-4">
             {categoryCards.map((category) => (
               <a
                 key={category.title}
                 href="#new-products"
-                className="group grid min-h-52 place-items-center rounded-[22px] border border-border-soft bg-white p-5 text-center text-ink no-underline shadow-card transition-transform duration-300 hover:-translate-y-1"
+                className="group grid min-h-40 place-items-center rounded-[18px] border-2 border-border-soft bg-white p-3 text-center text-ink no-underline shadow-card transition-[border-color,box-shadow] duration-300 hover:border-accent-500/70 hover:shadow-raised sm:min-h-52 sm:rounded-[22px] sm:p-5"
               >
                 <img
                   src={category.imageSrc}
@@ -975,10 +1010,10 @@ export function LandingPage() {
                   height={88}
                   loading="lazy"
                   decoding="async"
-                  className="h-[88px] w-24 object-contain transition-transform duration-300 group-hover:scale-105"
+                  className="h-16 w-20 object-contain transition-transform duration-300 group-hover:scale-[1.03] sm:h-[88px] sm:w-24"
                 />
                 <div>
-                  <h3 className="m-0 text-base font-black text-brand-950">{category.title}</h3>
+                  <h3 className="m-0 text-sm font-black text-brand-950 sm:text-base">{category.title}</h3>
                   <p className="mb-0 mt-2 text-xs font-bold text-muted">
                     {category.description}
                   </p>
@@ -997,6 +1032,7 @@ export function LandingPage() {
             action={search ? 'پاک کردن جستجو' : 'مشاهده همه محصولات'}
             onAction={() => {
               if (search) {
+                setApiProducts([])
                 setProductStatus('loading')
                 setSearch('')
                 setSearchDraft('')
@@ -1013,7 +1049,7 @@ export function LandingPage() {
           )}
 
           {productStatus === 'loading' ? (
-            <div className="grid grid-flow-col auto-cols-[minmax(270px,290px)] gap-5 overflow-hidden lg:grid-flow-row lg:grid-cols-4">
+            <div className="grid grid-flow-col auto-cols-[268px] gap-3 overflow-hidden sm:auto-cols-[290px] sm:gap-5 lg:grid-flow-row lg:grid-cols-4">
               {Array.from({ length: 4 }, (_, index) => (
                 <div
                   key={index}
@@ -1022,7 +1058,7 @@ export function LandingPage() {
               ))}
             </div>
           ) : products.length ? (
-            <div className="grid snap-x grid-flow-col auto-cols-[minmax(270px,290px)] gap-5 overflow-x-auto px-1 pb-4 lg:grid-flow-row lg:grid-cols-4 lg:justify-items-center lg:overflow-visible">
+            <div className="grid snap-x grid-flow-col auto-cols-[268px] gap-3 overflow-x-auto px-1 pb-4 sm:auto-cols-[290px] sm:gap-5 lg:grid-flow-row lg:grid-cols-4 lg:justify-items-center lg:overflow-visible">
               {products.map((product, index) => (
                 <ProductCard
                   key={product.id}
@@ -1033,7 +1069,7 @@ export function LandingPage() {
                   imageAlt={product.name}
                   rating={2 + (index % 3)}
                   isNew
-                  className="snap-start"
+                  className="snap-start !w-[268px] sm:!w-[290px]"
                   onAddToCart={() => addToCart(product)}
                   onOpenCart={() => setCartOpen(true)}
                 />
@@ -1049,7 +1085,7 @@ export function LandingPage() {
         </section>
 
         <section id="promotions" className="grid scroll-mt-5 gap-5 pt-12 lg:grid-cols-2">
-          <article className="relative min-h-52 overflow-hidden rounded-[24px] bg-[#eeeeee] p-7 sm:p-10">
+          <article className="relative min-h-44 overflow-hidden rounded-[20px] bg-[#eeeeee] p-5 sm:min-h-52 sm:rounded-[24px] sm:p-10">
             <DataSourcePill source="mock" />
             <Badge variant="accent" className="mt-5">
               تخفیف ویژه
@@ -1069,7 +1105,7 @@ export function LandingPage() {
               بیشتر بدانید
             </Button>
           </article>
-          <article className="relative min-h-52 overflow-hidden rounded-[24px] bg-brand-800 p-7 text-white sm:p-10">
+          <article className="relative min-h-44 overflow-hidden rounded-[20px] bg-brand-800 p-5 text-white sm:min-h-52 sm:rounded-[24px] sm:p-10">
             <DataSourcePill source="mock" />
             <h2 className="mb-0 mt-5 max-w-sm text-2xl font-black leading-10">
               تجهیزات صنعتی با کیفیت
@@ -1098,7 +1134,7 @@ export function LandingPage() {
             action="مشاهده همه پیشنهادها"
             onAction={() => showMockNotice('فهرست پیشنهادهای ویژه')}
           />
-          <div className="grid snap-x grid-flow-col auto-cols-[minmax(290px,308px)] gap-5 overflow-x-auto px-1 pb-4 lg:grid-cols-4 lg:justify-items-center lg:overflow-visible">
+          <div className="grid snap-x grid-flow-col auto-cols-[286px] gap-3 overflow-x-auto px-1 pb-4 sm:auto-cols-[308px] sm:gap-5 lg:grid-cols-4 lg:justify-items-center lg:overflow-visible">
             {Array.from({ length: 4 }, (_, index) => (
               <DiscountProductCard
                 key={index}
@@ -1111,7 +1147,7 @@ export function LandingPage() {
                 hours="۱۶"
                 minutes="۲۳"
                 seconds={String(47 - index * 5).padStart(2, '0')}
-                className="snap-start"
+                className="snap-start !w-[286px] sm:!w-[308px]"
                 onView={() => showMockNotice('جزئیات پیشنهاد ویژه')}
               />
             ))}
@@ -1125,11 +1161,11 @@ export function LandingPage() {
             action="مشاهده همه برندها"
             onAction={() => showMockNotice('صفحه عمومی برندها')}
           />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          <div className="grid grid-cols-2 gap-3 pt-1 sm:grid-cols-4 lg:grid-cols-8">
             {mockBrands.map((brand, index) => (
               <div
                 key={brand}
-                className="flex h-20 items-center justify-center rounded-[0_0_18px_18px] bg-white px-2 text-center text-lg font-black shadow-card"
+                className="flex h-16 items-center justify-center rounded-[16px] border-2 border-border-soft bg-white px-2 text-center text-base font-black shadow-card transition-colors hover:border-accent-500/70 sm:h-20 sm:rounded-[18px] sm:text-lg"
                 style={{ color: ['#213e7b', '#069d50', '#2973a7', '#009f83'][index % 4] }}
               >
                 {brand}

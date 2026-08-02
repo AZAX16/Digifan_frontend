@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   FileClock,
   FolderTree,
+  PackageX,
   LockKeyhole,
   RefreshCw,
   Tags,
@@ -30,6 +31,7 @@ interface DashboardData {
   totalProducts: number
   activeProducts: number
   draftProducts: number
+  outOfStockProducts: number
   archivedProducts: number
   categories: number
   brands: number
@@ -44,10 +46,13 @@ interface MetricCardProps {
   accessible: boolean
 }
 
+const countFormatter = new Intl.NumberFormat('en-US')
+
 const EMPTY_DASHBOARD: DashboardData = {
   totalProducts: 0,
   activeProducts: 0,
   draftProducts: 0,
+  outOfStockProducts: 0,
   archivedProducts: 0,
   categories: 0,
   brands: 0,
@@ -58,7 +63,7 @@ function getErrorMessage(error: unknown) {
 }
 
 function formatCount(value: number) {
-  return toPersianDigits(new Intl.NumberFormat('en-US').format(value))
+  return toPersianDigits(countFormatter.format(value))
 }
 
 function MetricCard({
@@ -71,7 +76,7 @@ function MetricCard({
 }: MetricCardProps) {
   return (
     <Surface
-      className="relative min-h-[162px] overflow-hidden !rounded-xl !border-[#293647] !bg-white !p-4 !shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+      className="relative flex h-full min-h-[200px] flex-col overflow-hidden !rounded-xl !border-[#293647] !bg-white !p-4 !shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
       elevation="flat"
       padding="none"
     >
@@ -87,15 +92,16 @@ function MetricCard({
           <Icon aria-hidden={true} size={21} strokeWidth={2.1} />
         </span>
       </div>
-      <div className="absolute inset-x-4 bottom-5 h-1.5 overflow-hidden rounded-full bg-[#edeef0]">
-        <span
-          className="block h-full rounded-full bg-accent-500 transition-[width] duration-500"
-          style={{
-            width: `${!accessible || progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%`,
-          }}
-        />
+      <div className="mt-auto pt-5">
+        <div className="h-1.5 overflow-hidden rounded-full bg-[#edeef0]">
+          <span
+            className="block h-full rounded-full bg-accent-500 transition-[width] duration-500"
+            style={{
+              width: `${!accessible || progress <= 0 ? 0 : Math.max(4, Math.min(100, progress))}%`,
+            }}
+          />
+        </div>
       </div>
-      <span aria-hidden="true" className="absolute inset-x-px bottom-px h-1 bg-[#edeef0]" />
     </Surface>
   )
 }
@@ -132,6 +138,9 @@ export function AdminDashboardPage() {
         ? getProducts({ page: 1, pageSize: 1, status: 'draft' }, abortController.signal)
         : Promise.resolve(null),
       canManageProducts
+        ? getProducts({ page: 1, pageSize: 1, status: 'outOfStock' }, abortController.signal)
+        : Promise.resolve(null),
+      canManageProducts
         ? getProducts({ page: 1, pageSize: 1, status: 'archived' }, abortController.signal)
         : Promise.resolve(null),
       canManageCategories ? getCategoryCount(abortController.signal) : Promise.resolve(null),
@@ -140,7 +149,7 @@ export function AdminDashboardPage() {
       .then((results) => {
         if (!isActive) return
 
-        const [allProducts, active, drafts, archived, categoryCount, brandCount] = results
+        const [allProducts, active, drafts, outOfStock, archived, categoryCount, brandCount] = results
         setData((currentData) => ({
           totalProducts: allProducts.status === 'fulfilled' && allProducts.value
             ? allProducts.value.totalCount
@@ -151,6 +160,9 @@ export function AdminDashboardPage() {
           draftProducts: drafts.status === 'fulfilled' && drafts.value
             ? drafts.value.totalCount
             : currentData.draftProducts,
+          outOfStockProducts: outOfStock.status === 'fulfilled' && outOfStock.value
+            ? outOfStock.value.totalCount
+            : currentData.outOfStockProducts,
           archivedProducts: archived.status === 'fulfilled' && archived.value
             ? archived.value.totalCount
             : currentData.archivedProducts,
@@ -186,6 +198,7 @@ export function AdminDashboardPage() {
         icon: Boxes,
         progress: data.totalProducts > 0 ? 100 : 0,
         accessible: canManageProducts,
+        href: '#/admin/products',
       },
       {
         label: 'محصولات فعال',
@@ -194,6 +207,7 @@ export function AdminDashboardPage() {
         icon: BadgeCheck,
         progress: (data.activeProducts / total) * 100,
         accessible: canManageProducts,
+        href: '#/admin/products?status=active',
       },
       {
         label: 'در انتظار بررسی',
@@ -202,6 +216,16 @@ export function AdminDashboardPage() {
         icon: FileClock,
         progress: (data.draftProducts / total) * 100,
         accessible: canManageProducts,
+        href: '#/admin/products?status=draft',
+      },
+      {
+        label: 'محصولات ناموجود',
+        value: data.outOfStockProducts,
+        description: 'نیازمند تأمین موجودی',
+        icon: PackageX,
+        progress: (data.outOfStockProducts / total) * 100,
+        accessible: canManageProducts,
+        href: '#/admin/products?status=outOfStock',
       },
       {
         label: 'بایگانی‌شده',
@@ -210,6 +234,7 @@ export function AdminDashboardPage() {
         icon: Archive,
         progress: (data.archivedProducts / total) * 100,
         accessible: canManageProducts,
+        href: '#/admin/products?status=archived',
       },
     ]
   }, [canManageProducts, data])
@@ -219,6 +244,7 @@ export function AdminDashboardPage() {
       data.totalProducts,
       data.activeProducts,
       data.draftProducts,
+      data.outOfStockProducts,
       data.archivedProducts,
       1,
     )
@@ -227,6 +253,7 @@ export function AdminDashboardPage() {
       { label: 'کل', value: data.totalProducts, emphasis: true },
       { label: 'فعال', value: data.activeProducts },
       { label: 'پیش‌نویس', value: data.draftProducts },
+      { label: 'ناموجود', value: data.outOfStockProducts },
       { label: 'بایگانی', value: data.archivedProducts },
     ].map((item) => ({
       ...item,
@@ -278,12 +305,20 @@ export function AdminDashboardPage() {
           <Alert className="mb-4" live title={feedback} variant="danger" />
         )}
 
-        <section aria-label="خلاصه محصولات" className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <section aria-label="خلاصه محصولات" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {isLoading
-            ? Array.from({ length: 4 }, (_, index) => (
-                <Skeleton key={index} className="h-[162px] w-full rounded-xl" />
+            ? Array.from({ length: 5 }, (_, index) => (
+                <Skeleton key={index} className="h-[200px] w-full rounded-xl" />
               ))
-            : metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
+            : metrics.map((metric) => metric.accessible ? (
+                <a
+                  key={metric.label}
+                  className="block h-full rounded-xl transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500 motion-reduce:transform-none"
+                  href={metric.href}
+                >
+                  <MetricCard {...metric} />
+                </a>
+              ) : <MetricCard key={metric.label} {...metric} />)}
         </section>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[286px_minmax(0,1fr)]" dir="ltr">

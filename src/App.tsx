@@ -171,7 +171,18 @@ function AppContent() {
 
   useEffect(() => {
     document.title = `${pageLabel} | ${isLanding ? 'Fanino' : 'DigiFan'}`
-  }, [isLanding, pageLabel])
+
+    if (!isStorefront) {
+      const description = document.querySelector<HTMLMetaElement>('meta[name="description"]')
+      if (description) {
+        description.content = isLanding
+          ? 'فروشگاه تجهیزات صنعتی فنینو؛ مشاهده و جستجوی محصولات صنعتی.'
+          : isUIKit
+            ? 'راهنمای زنده مؤلفه‌ها و الگوهای رابط کاربری DigiFan.'
+            : 'سامانه مدیریت محصولات و دسته‌بندی‌های DigiFan.'
+      }
+    }
+  }, [isLanding, isStorefront, isUIKit, pageLabel])
 
   useEffect(() => {
     if (!isProtectedPage) return

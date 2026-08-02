@@ -1,6 +1,6 @@
 # DigiFan Project Handoff
 
-> Last updated: 2026-07-31
+> Last updated: 2026-08-02
 > Purpose: this is the authoritative handoff for developers and coding agents. Read it before changing the project and update it whenever routes, API contracts, mock/real boundaries, deployment behavior, or major TODOs change.
 
 ## Current snapshot
@@ -9,15 +9,15 @@
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
 - Working branch: `feat/admin-page`
-- Base commit before the current uncommitted landing-asset correction: `5128653` (`feat(storefront): add Fanino landing page`)
+- Base commit before the current uncommitted API/UI update: `5765df1` (`feat: small fix on icons`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted Fanino landing-asset correction described below.
-- Suggested commit message for the current work: `fix(storefront): restore transparent landing assets`
+- The working tree intentionally contains the uncommitted API-contract migration and requested admin/storefront fixes described below.
+- Suggested commit message for the current work: `fix(app): harden API state and optimize admin bundles`
 
 The latest supplied OpenAPI document is:
 
 ```text
-C:\Users\ToosArax\.codex\attachments\a9ec3ca5-87f5-4a3c-963d-b7483c77f018\pasted-text.txt
+C:\Users\ToosArax\.codex\attachments\6c1da119-d987-43a9-aed5-ddc0d40911dc\pasted-text.txt
 ```
 
 It describes OpenAPI 3.0.1, `DigiFan.Backend.API` version `1.0`. Treat it as the current contract unless the user provides a newer document.
@@ -141,7 +141,7 @@ Admin creation/signup is not available. An administrator must already exist in t
 
 Customer access tokens are memory-only; refresh tokens and expiry are stored under a customer-specific `sessionStorage` key so they never conflict with the admin session. The client refreshes expired access tokens, retries one authorized 401 after refresh, restores the customer profile on landing-page load, normalizes Persian/Arabic phone digits to Western digits, and clears local state before best-effort logout revocation.
 
-The current supplied OpenAPI has no customer cart or checkout endpoints. Landing-page cart quantities and checkout remain local/mock and are explicitly labeled as such.
+The current OpenAPI now documents authenticated customer cart, checkout preview, order, and address endpoints. The landing page has not connected them yet: cart quantities and checkout remain explicitly local/mock until that integration is implemented.
 
 ### Clearance and frontend authorization
 
@@ -191,6 +191,7 @@ Restricted sidebar/mobile options are hidden. Direct navigation to a restricted 
 - Caller abort forwarding
 - Bounded, user-friendly API errors
 - HTML/error-body protection
+- Shared runtime validation for paginated product, review, category, brand, and storefront responses so malformed successful payloads fail with a bounded Persian API error instead of a render-time exception
 
 ### Categories
 
@@ -247,37 +248,39 @@ discontinued
 archived
 ```
 
-The create-product body includes:
+Create and update now use the same base-product body:
 
 ```text
+name: string
+sku: string | null
+description: string | null
+categoryId: uuid
+brandId: uuid
 price: decimal
-currency: string
 stockQuantity: int32
 reorderPoint: int32
+attributes: Record<string, string> | null
 ```
 
-The current `UpdateProductRequest` only accepts `name`, `description`, `categoryId`, and `brandId`. The removed `/out-of-stock` and `/inventory` operations are no longer called.
+`currency` is no longer accepted in create/update requests; it remains a response field. The removed `/out-of-stock`, `/inventory`, and all `/variants` operations are no longer called.
 
 The moderation page now:
 
-- Displays stock and reorder point
+- Displays SKU, price, stock, and reorder point
 - Highlights stock at/below the reorder point
-- Can discontinue production
+- Can discontinue production, while `discontinued` is intentionally absent from the status filter
 - Supports list/search/pagination/category/brand/status/sort filters
+- Synchronizes product search/status hash queries, including dashboard metric links, so refresh preserves the active view
 - Supports create/edit/delete/duplicate/publish/unpublish/archive
 - Refetches after mutations so filtered lists and totals remain consistent
 - Loads category/brand options only when the matching catalog permission exists; dependent filters and create/detail-edit controls remain permission-aware.
 - Does not display product slugs; slugs remain internal storefront/search identifiers.
 - Normalizes visible Toman currency labels to Persian `تومان`.
 
-The base-product editor sends price/inventory fields during create only; base values remain read-only afterward under the current contract. Variant price, stock, and reorder point are independently editable in the product-assets workspace. Inventory inputs require non-negative int32 values.
+The base-product editor validates and edits SKU, price, stock, reorder point, and up to 20 arbitrary key/value attributes. Inventory inputs require non-negative int32 values.
 
-`src/api/productAssets.ts` and the lazy-loaded per-product admin workspace support:
+`src/api/productAssets.ts` and the lazy-loaded per-product image workspace support:
 
-- `GET /api/admin/products/{id}/variants`
-- `POST /api/admin/products/{id}/variants`
-- `PUT /api/admin/products/{id}/variants/{variantId}`
-- `DELETE /api/admin/products/{id}/variants/{variantId}`
 - `GET /api/admin/products/{id}/images`
 - `POST /api/admin/products/{id}/images`
 - `PUT /api/admin/products/{id}/images/{imageId}`
@@ -285,9 +288,7 @@ The base-product editor sends price/inventory fields during create only; base va
 - `PUT /api/admin/products/{id}/images/{imageId}/primary`
 - `PUT /api/admin/products/{id}/images/order`
 
-Variant management includes name, SKU, price, stock quantity, reorder point, active state, and arbitrary key/value attributes. Image management includes URL/alt text, optional variant association, primary selection, deletion, and ordered movement. The current API accepts image URLs rather than uploaded files.
-
-The variant GET operation lacks an OpenAPI response schema. A live read-only check confirmed an array with `id`, `name`, `sku`, `price`, `currency`, `stockQuantity`, `reorderPoint`, `isActive`, and `attributes`; the client accepts both this array and a future `{ items }` envelope.
+Image management includes URL/alt text, primary selection, deletion, and ordered movement. The current API accepts image URLs rather than uploaded files and no longer associates images with variants.
 
 ### Admin product reviews
 
@@ -349,16 +350,16 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Product listing/filtering/pagination
 - Product create/edit/delete/duplicate
 - Product publication/status actions
-- Product create-time price, stock quantity, and reorder point
-- Product variant create/edit/delete with price, stock, active state, and custom attributes
-- Product image add/edit/delete, primary selection, variant association, and reordering
+- Product create/edit with SKU, price, stock quantity, reorder point, and arbitrary attributes
+
+- Product image add/edit/delete, primary selection, and reordering
 - Category CRUD and hierarchy management
 - Brand CRUD
 - Product review listing and replies
 - UI-kit components and showcase
 - Customer register/login/session refresh/profile restoration/logout on the landing page
-- Landing-page newest-product loading and submitted product search
-- Public storefront product search/filter/supported sort/pagination when matching backend products exist
+- Landing-page newest-product loading, submitted product search, and primary product images when supplied by the API
+- Public storefront product search/filter/supported sort/pagination and primary product images when matching backend products exist
 
 ### Partial or locally derived
 
@@ -366,9 +367,9 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Dashboard chart is orange and derived from product-status totals, not sales history.
 - Dashboard notices are local text, not notifications from the backend.
 - “مدیریت موجودی” and “کنترل قیمت” navigation both lead to the products screen.
-- Base-product price and inventory are displayed after creation but cannot be edited; variant price and inventory are editable.
+- Base-product SKU, price, inventory, reorder point, and attributes are editable through the current product update contract.
 - Brand management shares the content route with categories rather than having a separate route.
-- Storefront category pages are real API-backed for fields/endpoints the contract exposes and fall back to explicitly labeled demo cards when a category is empty or unavailable.
+- Storefront category pages are real API-backed for fields/endpoints the contract exposes, including primary image URLs, and fall back to explicitly labeled demo cards when a category is empty or unavailable.
 - The Fanino landing page is Figma-derived and responsive; its product grid is API-backed with labeled fallback cards while the brand name and static content are provisional.
 - Storefront brand choices are derived from the current API page because no public brand-list endpoint exists.
 - `Popular` sorting is intentionally marked demo-only because the backend exposes no popularity/rating sort.
@@ -378,7 +379,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Support ticket data, search, filters, selection, and replies; the separate product-review tab is real
 - Dashboard sales/revenue/orders/support/announcement business data
 - Notification bell (disabled)
-- Storefront hero copy/images, subcategory taxonomy, product imagery, ratings, new/discount badges, cart actions, technical filters, promotional banner, brand artwork, service claims, and footer contact content
+- Storefront hero copy/images, subcategory taxonomy, fallback product imagery, ratings, new/discount badges, cart actions, technical filters, promotional banner, brand artwork, service claims, and footer contact content
 - Landing-page hero carousel, category taxonomy, ratings/badges, promotions, special offers, brand artwork, service claims, cart/checkout, and non-product navigation destinations
 
 ## UI kit and design rules
@@ -398,7 +399,7 @@ Rules for future UI work:
 - Reuse `src/components/ui` before introducing one-off controls.
 - Export reusable components through `src/components/ui/index.ts`.
 - Demonstrate material new component variants on `src/pages/TestUIKit.tsx`.
-- Inputs normalize compatible typed digits to Persian by default.
+- Inputs normalize compatible typed digits to Persian by default; password fields are deliberately excluded so credentials are never mutated.
 - Convert numeric/phone request values back to Western digits before API calls.
 - Keep desktop sidebar and mobile bottom navigation behavior.
 - Maintain visible keyboard focus and reduced-motion support.
@@ -425,7 +426,9 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Dashboard uses `Promise.allSettled` so partial data can render when one request fails.
 - Dashboard skips product/category/brand requests that the current permission set does not allow, avoiding predictable 403 responses and unnecessary work.
 - Product lists use server pagination.
-- The 24 kB product-assets editor is lazy-loaded as a separate chunk only when an administrator opens it.
+- The product editor and image-management workspace are separate on-demand chunks; browsing/filtering moderation no longer downloads either editor, and removed variant code no longer ships.
+- Dialog focus trapping, Escape handling, scroll locking, and focus restoration share one lazy module instead of being duplicated across route chunks.
+- Completed countdowns unsubscribe from the shared one-second clock so expired offers do not keep background timer work alive.
 - The public category route is lazy-loaded as its own chunk.
 - The landing page is a separate ~11 kB gzip route chunk; its supplied industrial-pump cutout is a transparent 1536x1024 WebP (~78 kB), and category cards use dedicated transparent silhouette SVGs instead of generic library icons.
 - Storefront images use lazy decoding/loading except the LCP hero image.
@@ -434,23 +437,26 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Vite’s content-hashed assets receive one-year immutable caching on Vercel.
 - Authenticated `/api` responses are configured as private/no-store.
 
-Latest verified production build after the Fanino landing-page work:
+Latest verified production build after the 2026-08-02 project-wide bug/performance audit:
 
 ```text
-entry JS:                 217.40 kB raw / 69.37 kB gzip
-CSS:                       74.07 kB raw / 13.92 kB gzip
-admin moderation:         20.35 kB raw /  6.52 kB gzip
-product-assets editor:    24.12 kB raw /  6.73 kB gzip (lazy)
-category storefront:      29.57 kB raw /  9.05 kB gzip
-Fanino landing page:      36.81 kB raw / 11.18 kB gzip (lazy)
-Fanino hero cutout:       77.72 kB (1536x1024 alpha WebP)
-water-pump hero asset:   159.91 kB
-pressure-tank asset:      41.30 kB
+entry JS:                  217.82 kB raw / 69.54 kB gzip
+CSS:                        74.62 kB raw / 13.96 kB gzip
+admin moderation:          15.26 kB raw /  5.16 kB gzip
+product editor:             7.97 kB raw /  3.11 kB gzip (lazy)
+product image workspace:   10.89 kB raw /  3.82 kB gzip (lazy)
+shared dialog lifecycle:    1.26 kB raw /  0.62 kB gzip (lazy/shared)
+paginated response guard:   0.61 kB raw /  0.36 kB gzip (lazy/shared)
+category storefront:       30.64 kB raw /  9.52 kB gzip
+Fanino landing page:       37.64 kB raw / 11.45 kB gzip (lazy)
+Fanino hero cutout:        77.72 kB (1536x1024 alpha WebP)
+water-pump hero asset:    159.90 kB
+pressure-tank asset:       41.29 kB
 ```
 
 Remaining performance bottlenecks:
 
-- Dashboard requires six API requests because no aggregate endpoint exists.
+- Dashboard requires seven API requests because no aggregate endpoint exists; the extra request supplies the out-of-stock count.
 - Very large category sets are still kept fully in memory for hierarchy editing.
 - Backend cold starts/network failures have historically produced slow responses and 502 errors.
 
@@ -523,7 +529,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-07-31 after the Fanino landing-page implementation:
+Verified on 2026-08-02 after the latest OpenAPI migration, requested UI fixes, and project-wide bug/performance audit:
 
 ```text
 npm run check: PASS
@@ -532,9 +538,9 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-The public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
+The full `npm run check` pipeline passed on 2026-08-02 after the audit. The audit fixed password digit mutation, stale cleared-search state, review reply carryover across pages, category storefront image omission, stale route descriptions, expired countdown subscriptions, modal keyboard/scroll lifecycle, repeated number-formatter construction, and malformed paginated-response crashes; it also moved the product editor behind a lazy boundary. A local headless Edge smoke run after the final build rendered `#/landing`, `#/category/water-pumps`, `#/ui-kit`, and the logged-out `#/admin` login route successfully. In the prior storefront QA, the public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
 
-The newest live authentication/profile responses were verified with the supplied test administrator and included role `super-admin` plus the expected permission array. Read-only checks also confirmed paginated brand/review responses, the product `hasVariants` field, a live variant array and its fields, and an empty image array. No variant/image mutation was run against live data. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
+Earlier live authentication/profile checks confirmed role `super-admin` plus the expected permission array and paginated brand/review responses. The 2026-08-02 OpenAPI was verified directly for the new base-product fields, removal of variants/image associations, and customer cart item migration from `productVariantId` to `productId`; no authenticated live mutation was run for this update. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
 
 Before merging/deploying, manually verify in a browser:
 
@@ -542,9 +548,9 @@ Before merging/deploying, manually verify in a browser:
 2. Conditional 2FA, if the backend returns `requiresTwoFactor`.
 3. Profile phone display and phone change.
 4. Password change and logout.
-5. Product create with price/inventory fields and metadata-only edit.
-6. Variant create/edit/delete, including attributes and active state.
-7. Image add/edit/delete, primary selection, variant association, and reordering using public image URLs.
+5. Product create/edit with SKU, price, inventory, reorder point, and attributes.
+6. Dashboard metric links opening the correct active/draft/out-of-stock/archived filter.
+7. Image add/edit/delete, primary selection, and reordering using public image URLs.
 8. Product publish/unpublish/archive/discontinue actions.
 9. Category list/create/edit/delete.
 10. Brand list/create/edit/delete.
@@ -554,7 +560,7 @@ Before merging/deploying, manually verify in a browser:
 14. A real category slug using `?categorySlug=...` after water-pump/accessory products are published.
 15. One account from each lower permission set: hidden navigation, direct-route denial, and dashboard partial-data behavior.
 16. Landing-page customer register/login/refresh/logout with a real customer account.
-17. Landing-page default product loading, product search, mobile menu, and local demo cart behavior.
+17. Landing-page default product loading, immediate search clearing, mobile menu/layout, and local demo cart behavior.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -565,14 +571,14 @@ Each item is intentionally one line:
 - **Dashboard aggregate:** Add `GET /api/admin/dashboard/stats` to return all dashboard totals and real business metrics in one response.
 - **Category OpenAPI schema:** Update the supplied OpenAPI contract to document the live paginated category response and its `Page`/`PageSize` parameters.
 - **Brand response schema:** Document the successful `GET /api/admin/Brands` response shape in OpenAPI.
-- **Variant response schema:** Document successful product-variant list/detail response shapes instead of empty 200 schemas.
-- **Product update scope:** Document whether base price, currency, stock, and reorder point are intentionally immutable after create or expose supported update operations.
+
+
 - **Permission mapping:** Document the permission claim required by each protected operation, including reviews and replies.
 - **Admin product sort enum:** Publish and consistently implement the accepted admin `Sort` values.
 - **Phone format:** Document and validate the canonical admin phone-number format with examples.
 - **Support APIs:** Add ticket list/detail/search/reply/assignment/status endpoints to replace the mock support page.
 - **Notification APIs:** Add notification list/read-state endpoints for the disabled bell and dashboard notices.
-- **Pricing APIs:** Add variant/base price updates, bulk price updates, and price history for a dedicated price-control workflow.
+- **Pricing APIs:** Add bulk price updates and price history for a dedicated price-control workflow; single base-product price editing is now supported.
 - **Inventory APIs:** Add supported stock adjustments, reasons, audit history, and bulk inventory operations to replace the removed absolute inventory endpoint.
 - **Dashboard business data:** Add sales, orders, revenue trend, announcements, and support-summary endpoints.
 - **Admin provisioning:** Add a controlled admin invitation/creation flow if administrators should not be seeded manually.
@@ -580,13 +586,13 @@ Each item is intentionally one line:
 - **Auth OpenAPI security:** Mark login, 2FA, and refresh operations with `security: []` if they are public instead of inheriting global Bearer security.
 - **Reliability:** Reduce cold starts, tune database connections/timeouts, and monitor upstream failures that surface as 502 responses.
 - **CORS:** Explicitly allow the production Vercel origin and required local development origins.
-- **Storefront media:** Add product images/gallery, availability, discounts, and rating data required by the existing commerce UI.
-- **Customer cart/checkout:** Add authenticated cart-item and checkout/order endpoints so the landing-page demo cart can become persistent and transactional.
+- **Storefront commerce fields:** Add list-level ratings and discounts plus clearly documented availability semantics required by the existing commerce UI.
+
 
 ## Frontend work still needed
 
 - Build the public product-detail page using `getStorefrontProduct`.
-- Replace storefront mock sections as media, rating, availability, taxonomy, cart, technical-attribute, brand-list, and CMS endpoints become available.
+- Connect the existing customer cart, checkout-preview, order, and address endpoints; then replace the remaining taxonomy, discount, brand-list, and CMS mocks as APIs become available.
 - Replace the provisional Fanino logo/text artwork and placeholder category/brand assets when final brand files are supplied.
 - Move public storefront pages to real server-visible URLs and SSR/SSG before enabling indexing.
 - Build administration and report pages for the permission claims that currently have no matching frontend route.
@@ -604,9 +610,9 @@ Each item is intentionally one line:
 - Role names and their three-role matrix are not enumerated in OpenAPI; use the issued permission claims and do not hard-code role-name access rules.
 - `GET /api/admin/Brands` has no documented 200 response schema.
 - The current OpenAPI removed `/api/admin/products/{id}/out-of-stock` and `/inventory`; do not reintroduce those calls without a newer contract.
-- `UpdateProductRequest` only accepts metadata; price, currency, stock, and reorder point cannot currently be changed through base-product update.
-- Product variant list responses have empty successful schemas; the client uses the verified live array shape and defensively accepts a future `{ items }` envelope, but OpenAPI still needs correction.
-- Product image creation accepts a public URL only; no binary upload or media-storage endpoint is documented.
+- `CreateProductRequest` and `UpdateProductRequest` now share SKU, price, stock, reorder point, and attributes; `currency` is response-only and is not submitted.
+- Product variant endpoints and DTOs were removed from the current OpenAPI; do not reintroduce variant calls without a newer contract.
+- Product image creation accepts a public URL only; no binary upload/media-storage endpoint or variant association is documented.
 - Admin product `Sort` is an unconstrained string; storefront sort is the only documented enum.
 - The live category GET is paginated while the supplied OpenAPI still shows an array; the frontend deliberately supports both shapes.
 - 2FA still exists in the newest contract; do not remove it based on older API versions.
@@ -619,16 +625,36 @@ Each item is intentionally one line:
 
 ## Current uncommitted change set
 
-At the time this handoff was written, the current Fanino landing-asset correction is:
+At the time this handoff was written, the current API/UI update is:
 
 ```text
-src/assets/storefront/category-accessories.svg
-src/assets/storefront/category-fan.svg
-src/assets/storefront/category-motor.svg
-src/assets/storefront/category-pump.svg
-src/assets/storefront/fanino-industrial-hero.webp
-src/pages/storefront/LandingPage.tsx
 AGENTS.md
+src/App.tsx
+src/api/brands.ts
+src/api/categories.ts
+src/api/customerAuth.ts
+src/api/pageResponse.ts (new)
+src/api/productAssets.ts
+src/api/products.ts
+src/api/reviews.ts
+src/api/storefrontProducts.ts
+src/components/ui/Countdown.tsx
+src/components/ui/Field.tsx
+src/hooks/useDialogLifecycle.ts (new)
+src/pages/admin/AdminCategoriesPage.tsx
+src/pages/admin/AdminDashboardPage.tsx
+src/pages/admin/AdminModerationPage.tsx
+src/pages/admin/AdminReviewsPanel.tsx
+src/pages/admin/AdminSupportPage.tsx
+src/pages/admin/ProductAssetsDialog.tsx
+src/pages/admin/ProductEditorDialog.tsx
+src/pages/admin/ProductImagesPanel.tsx
+src/pages/admin/ProductVariantsPanel.tsx (deleted)
+src/pages/categories/CategoriesManagerPage.tsx
+src/pages/storefront/CategoryProductsPage.tsx
+src/pages/storefront/LandingPage.tsx
 ```
+
+The update aligns products/images with the newest OpenAPI, adds dashboard out-of-stock navigation/charting with equal-height metric cards and separated progress bars, persists admin content/support tabs in hash parameters, replaces parent-category wording with main/subcategory wording, fixes storefront category/brand border clipping, clears submitted searches when their fields are erased, tightens mobile landing sizing, and applies the project-wide robustness/performance audit summarized in the validation section.
 
 Do not discard unrelated existing changes. After committing, update this section with the new commit hash and change the working-tree note near the top.

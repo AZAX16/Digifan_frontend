@@ -33,9 +33,12 @@ import {
 } from '../../components/ui'
 import { toPersianDigits } from '../../utils/persianDigits'
 import { formatCurrencyLabel } from '../../utils/currency'
-import { ProductEditorDialog, type ProductEditorTarget } from './ProductEditorDialog'
+import type { ProductEditorTarget } from './ProductEditorDialog'
 import { AdminShell } from './AdminShell'
 
+const ProductEditorDialog = lazy(() =>
+  import('./ProductEditorDialog').then((module) => ({ default: module.ProductEditorDialog })),
+)
 const ProductAssetsDialog = lazy(() =>
   import('./ProductAssetsDialog').then((module) => ({ default: module.ProductAssetsDialog })),
 )
@@ -68,7 +71,6 @@ const statusOptions: { value: ProductStatus | ''; label: string }[] = [
   { value: 'active', label: 'فعال' },
   { value: 'inactive', label: 'غیرفعال' },
   { value: 'outOfStock', label: 'ناموجود' },
-  { value: 'discontinued', label: 'توقف تولید' },
   { value: 'archived', label: 'بایگانی‌شده' },
 ]
 
@@ -146,6 +148,31 @@ function getInitialProductSearch() {
   return new URLSearchParams(queryString).get('search')?.trim() ?? ''
 }
 
+function getInitialProductStatus(): ProductStatus | '' {
+  const queryString = window.location.hash.split('?')[1] ?? ''
+  const requestedStatus = new URLSearchParams(queryString).get('status')?.trim() ?? ''
+  const allowedStatuses = new Set<ProductStatus>(
+    statusOptions.flatMap((option) => option.value ? [option.value] : []),
+  )
+
+  return allowedStatuses.has(requestedStatus as ProductStatus)
+    ? requestedStatus as ProductStatus
+    : ''
+}
+
+function updateProductHash(search: string, status: ProductStatus | '') {
+  const parameters = new URLSearchParams()
+  const normalizedSearch = search.trim()
+
+  if (normalizedSearch) parameters.set('search', normalizedSearch)
+  if (status) parameters.set('status', status)
+  const queryString = parameters.toString()
+  window.history.replaceState(
+    null,
+    '',
+    `#/admin/products${queryString ? `?${queryString}` : ''}`,
+  )
+}
 export function AdminModerationPage() {
   const { profile } = useAuth()
   const [productsPage, setProductsPage] = useState<ProductPage>(EMPTY_PAGE)
@@ -153,7 +180,7 @@ export function AdminModerationPage() {
   const [brands, setBrands] = useState<Brand[]>([])
   const [searchDraft, setSearchDraft] = useState(getInitialProductSearch)
   const [search, setSearch] = useState(getInitialProductSearch)
-  const [status, setStatus] = useState<ProductStatus | ''>('')
+  const [status, setStatus] = useState<ProductStatus | ''>(getInitialProductStatus)
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
   const [sort, setSort] = useState('')
@@ -252,9 +279,20 @@ export function AdminModerationPage() {
     }
   }, [brandId, categoryId, page, refreshKey, requestKey, search, sort, status])
 
+  const handleSearchDraftChange = (nextSearchDraft: string) => {
+    setSearchDraft(nextSearchDraft)
+
+    if (!nextSearchDraft.trim() && search) {
+      setPage(1)
+      setSearch('')
+      updateProductHash('', status)
+    }
+  }
+
   const handleSearch = (nextSearch: string) => {
     setPage(1)
     setSearch(nextSearch)
+    updateProductHash(nextSearch, status)
   }
 
   const resetFilters = () => {
@@ -265,6 +303,7 @@ export function AdminModerationPage() {
     setBrandId('')
     setSort('')
     setPage(1)
+    updateProductHash('', '')
   }
 
   const runProductAction = async (product: Product, action: ProductAction) => {
@@ -324,6 +363,13 @@ export function AdminModerationPage() {
   }
 
   const isProductBusy = pendingProductId !== null
+  const closeEditorDialog = useCallback(() => setEditorTarget(null), [])
+  const handleProductSaved = useCallback(() => {
+    setEditorTarget(null)
+    setPage(1)
+    setRefreshKey((currentKey) => currentKey + 1)
+    setFeedback({ variant: 'success', title: 'اطلاعات محصول ذخیره شد.' })
+  }, [])
   const closeAssetsDialog = useCallback(() => setAssetsTarget(null), [])
   const handleAssetsChanged = useCallback(() => {
     setRefreshKey((currentKey) => currentKey + 1)
@@ -336,7 +382,7 @@ export function AdminModerationPage() {
         value: searchDraft,
         disabled: isLoading,
         placeholder: 'جستجو در محصولات…',
-        onChange: setSearchDraft,
+        onChange: handleSearchDraftChange,
         onSubmit: handleSearch,
       }}
     >
@@ -381,7 +427,7 @@ export function AdminModerationPage() {
                 variant="warning"
               >
                 فیلترها و ویرایش جزئیات دسته‌بندی یا برند فقط با مجوزهای مربوط در دسترس هستند؛
-                مدیریت وضعیت، تنوع‌ها و تصاویر محصول همچنان فعال است.
+                مدیریت وضعیت و تصاویر محصول همچنان فعال است.
               </Alert>
             )}
 
@@ -402,6 +448,7 @@ export function AdminModerationPage() {
                         onChange={() => {
                           setStatus(option.value)
                           setPage(1)
+                          updateProductHash(search, option.value)
                         }}
                       />
                     ))}
@@ -490,7 +537,6 @@ export function AdminModerationPage() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant={statusDetails.variant}>{statusDetails.label}</Badge>
-                                  {product.hasVariants && <Badge variant="accent">دارای تنوع</Badge>}
                                   <span className="text-xs text-muted">{getDisplayValue(product.categoryName, 'بدون دسته‌بندی')}</span>
                                   <span aria-hidden="true" className="size-1 rounded-full bg-border" />
                                   <span className="text-xs text-muted">{getDisplayValue(product.brandName, 'بدون برند')}</span>
@@ -512,6 +558,7 @@ export function AdminModerationPage() {
                                   <span>
                                     نقطه سفارش: <strong className="text-ink">{toPersianDigits(String(product.reorderPoint))}</strong>
                                   </span>
+                                  {product.sku?.trim() && <span>شناسه کالا: <strong className="text-ink">{product.sku}</strong></span>}
                                   <span>ساخته‌شده: {formatProductDate(product.createdAt)}</span>
                                 </div>
                               </div>
@@ -538,7 +585,7 @@ export function AdminModerationPage() {
                                 variant="secondary"
                                 onClick={() => setAssetsTarget(product)}
                               >
-                                تنوع‌ها و تصاویر
+                                تصاویر
                               </Button>
                               {isStatus(product, 'active') ? (
                                 <Button
@@ -626,28 +673,33 @@ export function AdminModerationPage() {
             </div>
       </main>
       {editorTarget && canEditProductDetails && (
-        <ProductEditorDialog
-          key={editorTarget.mode === 'create'
-            ? 'create'
-            : `${editorTarget.mode}-${editorTarget.product.id}`}
-          brands={brands}
-          categories={categories}
-          target={editorTarget}
-          onClose={() => setEditorTarget(null)}
-          onSaved={() => {
-            setEditorTarget(null)
-            setPage(1)
-            setRefreshKey((currentKey) => currentKey + 1)
-            setFeedback({ variant: 'success', title: 'اطلاعات محصول ذخیره شد.' })
-          }}
-        />
+        <Suspense
+          fallback={(
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand-950/45 p-4 backdrop-blur-sm" dir="rtl">
+              <Surface elevation="raised" padding="lg">
+                <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی ویرایشگر محصول…</p>
+              </Surface>
+            </div>
+          )}
+        >
+          <ProductEditorDialog
+            key={editorTarget.mode === 'create'
+              ? 'create'
+              : `${editorTarget.mode}-${editorTarget.product.id}`}
+            brands={brands}
+            categories={categories}
+            target={editorTarget}
+            onClose={closeEditorDialog}
+            onSaved={handleProductSaved}
+          />
+        </Suspense>
       )}
       {assetsTarget && (
         <Suspense
           fallback={(
             <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brand-950/50 p-4 backdrop-blur-sm" dir="rtl">
               <Surface elevation="raised" padding="lg">
-                <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی مدیریت تنوع‌ها و تصاویر…</p>
+                <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی مدیریت تصاویر…</p>
               </Surface>
             </div>
           )}

@@ -97,8 +97,8 @@ function commitAuthResult(result: CustomerAuthResult, fallback?: StoredCustomerS
   const accessToken = result.accessToken?.trim()
   const accessTokenExpiresAt = result.accessTokenExpiresAt
   const nextRefreshToken = result.refreshToken?.trim()
-  const refreshToken = nextRefreshToken ?? fallback?.refreshToken
-  const refreshTokenExpiresAt = nextRefreshToken
+  const refreshToken = nextRefreshToken?.length ? nextRefreshToken : fallback?.refreshToken
+  const refreshTokenExpiresAt = nextRefreshToken?.length
     ? result.refreshTokenExpiresAt
     : fallback?.refreshTokenExpiresAt
 
