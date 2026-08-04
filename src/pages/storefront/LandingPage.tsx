@@ -2,11 +2,11 @@ import type { FormEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
-  Factory,
-  Gift,
+
   Headphones,
   ImageIcon,
   LogOut,
@@ -31,13 +31,20 @@ import {
   type CustomerProfile,
 } from '../../api/customerAuth'
 import {
+  addCustomerCartItem,
+  getCustomerCart,
+  removeCustomerCartItem,
+  updateCustomerCartItem,
+  type CustomerCartItem,
+} from '../../api/customerCart'
+import {
   getStorefrontProducts,
   type StorefrontProductListItem,
 } from '../../api/storefrontProducts'
-import categoryAccessoriesImage from '../../assets/storefront/category-accessories.svg'
-import categoryFanImage from '../../assets/storefront/category-fan.svg'
-import categoryMotorImage from '../../assets/storefront/category-motor.svg'
-import categoryPumpImage from '../../assets/storefront/category-pump.svg'
+import categoryAccessoriesImage from '../../assets/storefront/category-accessories-figma.png'
+import categoryFanImage from '../../assets/storefront/category-fan-figma.png'
+import categoryMotorImage from '../../assets/storefront/category-motor-figma.png'
+import categoryPumpImage from '../../assets/storefront/category-pump-figma.png'
 import faninoHeroImage from '../../assets/storefront/fanino-industrial-hero.webp'
 import waterPumpImage from '../../assets/storefront/water-pump.webp'
 import { Badge } from '../../components/ui/Badge'
@@ -49,6 +56,7 @@ import { useDialogLifecycle } from '../../hooks/useDialogLifecycle'
 import { cn } from '../../utils/cn'
 import { toPersianDigits } from '../../utils/persianDigits'
 import { isValidPhoneNumber, normalizePhoneNumber } from '../../utils/phoneNumber'
+import { categoryNavigationItems } from './categoryProductsData'
 
 type AuthMode = 'login' | 'register'
 type ProductLoadStatus = 'loading' | 'ready' | 'error'
@@ -62,7 +70,9 @@ interface LandingProduct {
   imageSrc?: string
 }
 
-interface LocalCartItem extends LandingProduct {
+interface LocalCartItem extends Omit<LandingProduct, 'id'> {
+  id: string
+  productId: string
   quantity: number
 }
 
@@ -102,24 +112,28 @@ const categoryCards = [
   {
     title: 'پمپ‌های صنعتی',
     description: 'انواع پمپ‌های سانتریفیوژ و صنعتی',
+    href: '#/category/water-pumps',
     imageSrc: categoryPumpImage,
     imageAlt: 'نماد پمپ صنعتی',
   },
   {
     title: 'الکتروموتورها',
     description: 'AC، DC، سروو و گیربکس‌دار',
+    href: '#/category/electric-motors',
     imageSrc: categoryMotorImage,
     imageAlt: 'نماد الکتروموتور',
   },
   {
     title: 'فن و تهویه',
     description: 'فن‌های صنعتی و تهویه مطبوع',
+    href: '#/category/industrial-fans',
     imageSrc: categoryFanImage,
     imageAlt: 'نماد فن صنعتی',
   },
   {
     title: 'تجهیزات جانبی',
     description: 'قطعات یدکی و ملزومات',
+    href: '#/category/accessories',
     imageSrc: categoryAccessoriesImage,
     imageAlt: 'نماد چرخ‌دنده تجهیزات جانبی',
   },
@@ -164,6 +178,23 @@ function formatPrice(value: number, currency = 'تومان') {
   return `${landingPriceFormatter.format(value)} ${formatCurrency(currency)}`
 }
 
+
+function mapCustomerCartItem(item: CustomerCartItem): LocalCartItem {
+  const productName = item.productName?.trim()
+  const sku = item.sku?.trim()
+  const imageUrl = item.imageUrl?.trim()
+
+  return {
+    id: item.id,
+    productId: item.productId,
+    name: productName?.length ? productName : 'محصول بدون نام',
+    description: sku?.length ? `کد کالا: ${sku}` : 'محصول سبد خرید',
+    price: item.unitPrice,
+    currency: formatCurrency(item.currency),
+    imageSrc: imageUrl?.length ? imageUrl : undefined,
+    quantity: item.quantity,
+  }
+}
 
 function mapApiProduct(product: StorefrontProductListItem): LandingProduct {
   const name = product.name?.trim()
@@ -344,10 +375,12 @@ function CartDrawer({
   items,
   onClose,
   onQuantityChange,
+  source,
   onCheckout,
 }: {
   open: boolean
   items: LocalCartItem[]
+  source: 'api' | 'mock'
   onClose: () => void
   onQuantityChange: (id: string, quantity: number) => void
   onCheckout: () => void
@@ -370,7 +403,7 @@ function CartDrawer({
       <aside
         ref={dialogRef}
         tabIndex={-1}
-        aria-label="سبد خرید نمایشی"
+        aria-label="سبد خرید"
         aria-modal="true"
         className="mr-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl"
         dir="rtl"
@@ -379,7 +412,7 @@ function CartDrawer({
         <div className="flex items-center justify-between border-b border-border-soft p-5">
           <div>
             <h2 className="m-0 text-xl font-black text-brand-950">سبد خرید</h2>
-            <DataSourcePill source="mock" />
+            <DataSourcePill source={source} />
           </div>
           <button
             type="button"
@@ -458,7 +491,9 @@ function CartDrawer({
             ادامه فرایند خرید
           </Button>
           <p className="mb-0 mt-3 text-center text-xs text-muted">
-            سبد و پرداخت فعلاً نمایشی هستند.
+            {source === 'api'
+              ? 'اقلام سبد از حساب مشتری دریافت می‌شوند؛ انتخاب آدرس و پرداخت هنوز در این صفحه پیاده‌سازی نشده است.'
+              : 'برای استفاده از سبد خرید وارد حساب مشتری شوید.'}
           </p>
         </div>
       </aside>
@@ -489,28 +524,25 @@ function LandingHeader({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const navigation = [
-    ['صفحه اصلی', '#top'],
-    ['محصولات', '#new-products'],
-    ['برندها', '#brands'],
-    ['خدمات', '#services'],
-    ['پروژه‌ها', '#promotions'],
-    ['دانلودها', '#footer'],
-    ['اخبار و مقالات', '#footer'],
-    ['درباره ما', '#footer'],
-    ['تماس با ما', '#contact'],
+    { label: 'صفحه اصلی', target: '#top', active: true },
+    { label: 'محصولات', target: '#new-products', hasMenu: true },
+    { label: 'برندها', target: '#brands' },
+    { label: 'خدمات', target: '#services' },
+    { label: 'پروژه‌ها', target: '#promotions' },
+    { label: 'دانلودها', target: '#footer' },
+    { label: 'اخبار و مقالات', target: '#footer' },
+    { label: 'درباره ما', target: '#footer' },
+    { label: 'تماس با ما', target: '#contact' },
   ]
 
   return (
     <header className="border-b border-border-soft bg-white" dir="rtl">
-      <div className="mx-auto grid max-w-[1360px] grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:px-6 lg:grid-cols-[250px_minmax(360px,680px)_250px] lg:gap-10 lg:py-5">
+      <div className="mx-auto grid max-w-[1360px] grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:px-5 lg:grid-cols-[250px_minmax(360px,680px)_250px] lg:gap-10 lg:px-2.5 lg:py-5">
         <a href="#/landing" className="flex items-center gap-3 text-brand-950 no-underline">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-brand-950 text-white">
-            <Factory size={24} />
+          <span className="flex size-11 items-center justify-center rounded-df-sm border-2 border-brand-950">
+            <ImageIcon size={25} strokeWidth={2.4} />
           </span>
-          <span className="leading-tight">
-            <strong className="block text-xl font-black">فنینو</strong>
-            <small className="text-xs font-bold tracking-[0.16em] text-accent-500">FANINO</small>
-          </span>
+          <strong className="text-xl font-black">فنینو</strong>
         </a>
 
         <form
@@ -528,19 +560,14 @@ function LandingHeader({
               type="search"
               value={search}
               placeholder="جستجو در محصولات…"
-              className="h-12 w-full rounded-xl border border-transparent bg-[#eeeeee] pr-12 pl-24 text-sm text-ink transition-colors focus:border-focus focus:bg-white"
+              className="h-12 w-full rounded-xl border border-transparent bg-[#eeeeee] pr-12 pl-4 text-sm text-ink transition-colors focus:border-focus focus:bg-white"
               onChange={(event) => onSearchChange(event.target.value)}
             />
-            <button
-              type="submit"
-              className="absolute left-1.5 top-1.5 min-h-9 rounded-lg bg-brand-950 px-4 text-xs font-black text-white"
-            >
-              جستجو
-            </button>
+
           </label>
         </form>
 
-        <div className="flex items-center justify-end gap-2" dir="ltr">
+        <div className="flex items-center justify-end gap-2" dir="rtl">
           <button
             type="button"
             aria-label="باز کردن سبد خرید"
@@ -605,18 +632,36 @@ function LandingHeader({
         )}
       >
         <div className="mx-auto flex max-w-[1280px] flex-col py-2 lg:flex-row lg:items-center lg:justify-center lg:gap-10 lg:py-0">
-          {navigation.map(([label, target], index) => (
-            <a
-              key={label}
-              href={target}
-              className={cn(
-                'border-b border-border-soft px-2 py-3 text-sm font-black text-brand-950 no-underline last:border-0 lg:border-0 lg:py-5',
-                index === 0 && 'text-accent-500',
-              )}
-              onClick={() => setMobileMenuOpen(false)}
+          {navigation.map((item) => (
+            <div
+              key={item.label}
+              className={cn('relative', item.hasMenu && 'group')}
             >
-              {label}
-            </a>
+              <a
+                href={item.target}
+                className={cn(
+                  'flex items-center justify-between border-b border-border-soft px-2 py-3 text-sm font-black text-brand-950 no-underline last:border-0 lg:justify-start lg:border-0 lg:py-5',
+                  item.active && 'text-accent-500',
+                )}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {item.label}
+                {item.hasMenu && <ChevronDown className="mr-1" size={17} />}
+              </a>
+              {item.hasMenu && (
+                <div className="right-0 z-50 hidden min-w-52 rounded-df-md border border-border-soft bg-white p-2 shadow-raised group-hover:block group-focus-within:block lg:absolute lg:top-14">
+                  {categoryNavigationItems.map((category) => (
+                    <a
+                      key={category.key}
+                      href={category.route}
+                      className="block rounded-md px-4 py-3 text-sm font-bold text-brand-950 no-underline hover:bg-orange-50 hover:text-accent-500"
+                    >
+                      {category.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </nav>
@@ -639,7 +684,11 @@ function SectionHeading({
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2">
         <h2 className="m-0 text-xl font-black text-brand-950 sm:text-2xl">{title}</h2>
-        {source && <DataSourcePill source={source} />}
+        {source && (
+          <span className="sr-only">
+            {source === 'api' ? 'داده زنده API' : 'بخش نمایشی'}
+          </span>
+        )}
       </div>
       {action && (
         <button
@@ -664,9 +713,6 @@ function ServicesStrip({ className, id }: { className?: string; id?: string }) {
         className,
       )}
     >
-      <span className="absolute left-4 top-3">
-        <DataSourcePill source="mock" />
-      </span>
       {services.map((service, index) => {
         const ServiceIcon = service.icon
         return (
@@ -697,7 +743,10 @@ function StorefrontFooter() {
           <strong className="text-lg text-accent-500">
             فنینو <span className="text-xs tracking-widest">FANINO</span>
           </strong>
-          <DataSourcePill source="mock" />
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/65">
+            <DataSourcePill source="mock" />
+            <span>محصولات، جستجو و سبد کاربران واردشده از API؛ دسته‌بندی‌ها، امتیازها، برندها و پیشنهادها نمایشی‌اند.</span>
+          </div>
         </div>
       </div>
       <div className="mx-auto grid max-w-[1360px] gap-10 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4 lg:px-6">
@@ -820,6 +869,21 @@ export function LandingPage() {
   }, [])
 
   useEffect(() => {
+    if (!profile) return
+
+    const controller = new AbortController()
+    void getCustomerCart(controller.signal)
+      .then((cart) => setCartItems(cart.items.map(mapCustomerCartItem)))
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        setCartItems([])
+        setNotice(error instanceof Error ? error.message : 'دریافت سبد خرید انجام نشد.')
+      })
+
+    return () => controller.abort()
+  }, [profile])
+
+  useEffect(() => {
     const controller = new AbortController()
 
     void getStorefrontProducts(
@@ -880,29 +944,47 @@ export function LandingPage() {
 
   const showMockNotice = (message: string) => setNotice(`${message} فعلاً نمایشی است.`)
 
-  const addToCart = (product: LandingProduct) => {
-    setCartItems((current) => {
-      const existing = current.find((item) => item.id === product.id)
-      if (existing) {
-        return current.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item,
-        )
-      }
-      return [...current, { ...product, quantity: 1 }]
-    })
-    setNotice(`${product.name} به سبد نمایشی اضافه شد.`)
+  const refreshCart = async () => {
+    const cart = await getCustomerCart()
+    setCartItems(cart.items.map(mapCustomerCartItem))
   }
 
-  const changeCartQuantity = (id: string, quantity: number) => {
-    setCartItems((current) =>
-      quantity <= 0
-        ? current.filter((item) => item.id !== id)
-        : current.map((item) => (item.id === id ? { ...item, quantity } : item)),
-    )
+  const addToCart = async (product: LandingProduct) => {
+    if (product.id.startsWith('demo-')) {
+      showMockNotice('این محصول نمونه است و امکان افزودن آن به سبد واقعی وجود ندارد.')
+      return
+    }
+    if (!profile) {
+      setNotice('برای افزودن محصول به سبد، ابتدا وارد حساب مشتری شوید.')
+      setAuthOpen(true)
+      return
+    }
+
+    try {
+      await addCustomerCartItem(product.id)
+      await refreshCart()
+      setNotice(`${product.name} به سبد خرید اضافه شد.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'افزودن محصول به سبد انجام نشد.')
+    }
+  }
+
+  const changeCartQuantity = async (id: string, quantity: number) => {
+    try {
+      if (quantity <= 0) {
+        await removeCustomerCartItem(id)
+      } else {
+        await updateCustomerCartItem(id, quantity)
+      }
+      await refreshCart()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'به‌روزرسانی سبد خرید انجام نشد.')
+    }
   }
 
   const handleLogout = async () => {
     setProfile(null)
+    setCartItems([])
     await logoutCustomer()
     setNotice('از حساب مشتری خارج شدید.')
   }
@@ -921,7 +1003,7 @@ export function LandingPage() {
         onCartOpen={() => setCartOpen(true)}
       />
 
-      <main className="mx-auto max-w-[1360px] px-2.5 py-3 sm:px-5 sm:py-4 lg:px-6">
+      <main className="mx-auto max-w-[1360px] px-2.5 py-3 sm:px-5 sm:py-4 lg:px-2.5">
         <section
           className="relative isolate grid min-h-[350px] grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[22px] bg-[#061b30] px-4 text-white sm:min-h-[390px] sm:rounded-[26px] sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:px-16"
           style={{
@@ -930,8 +1012,7 @@ export function LandingPage() {
           }}
         >
           <div className="relative z-10 flex min-w-0 flex-col items-start justify-center py-10 text-right lg:order-1">
-            <DataSourcePill source="mock" />
-            <h1 className="mb-0 mt-4 max-w-xl text-3xl font-black leading-[1.35] sm:mt-5 sm:text-5xl">
+            <h1 className="m-0 max-w-xl text-3xl font-black leading-[1.35] sm:text-5xl">
               راهکارهای مطمئن
               <br />
               برای صنایع پیشرو
@@ -987,6 +1068,21 @@ export function LandingPage() {
           >
             <ChevronRight />
           </button>
+          <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3" aria-label="اسلاید اول از سه اسلاید">
+            {[true, false, false].map((active, index) => (
+              <button
+                key={index}
+                type="button"
+                aria-label={`نمایش اسلاید ${toPersianDigits(String(index + 1))}`}
+                aria-current={active ? 'true' : undefined}
+                className={cn(
+                  'size-3 rounded-full border-0',
+                  active ? 'bg-accent-500' : 'bg-white/55',
+                )}
+                onClick={() => showMockNotice('اسلایدر تبلیغاتی')}
+              />
+            ))}
+          </div>
         </section>
 
         <section className="mt-6 sm:mt-8">
@@ -1000,7 +1096,7 @@ export function LandingPage() {
             {categoryCards.map((category) => (
               <a
                 key={category.title}
-                href="#new-products"
+                href={category.href}
                 className="group grid min-h-40 place-items-center rounded-[18px] border-2 border-border-soft bg-white p-3 text-center text-ink no-underline shadow-card transition-[border-color,box-shadow] duration-300 hover:border-accent-500/70 hover:shadow-raised sm:min-h-52 sm:rounded-[22px] sm:p-5"
               >
                 <img
@@ -1070,7 +1166,7 @@ export function LandingPage() {
                   rating={2 + (index % 3)}
                   isNew
                   className="snap-start !w-[268px] sm:!w-[290px]"
-                  onAddToCart={() => addToCart(product)}
+                  onAddToCart={() => void addToCart(product)}
                   onOpenCart={() => setCartOpen(true)}
                 />
               ))}
@@ -1086,16 +1182,15 @@ export function LandingPage() {
 
         <section id="promotions" className="grid scroll-mt-5 gap-5 pt-12 lg:grid-cols-2">
           <article className="relative min-h-44 overflow-hidden rounded-[20px] bg-[#eeeeee] p-5 sm:min-h-52 sm:rounded-[24px] sm:p-10">
-            <DataSourcePill source="mock" />
-            <Badge variant="accent" className="mt-5">
+            <Badge variant="accent">
               تخفیف ویژه
             </Badge>
             <h2 className="mb-0 mt-3 text-3xl font-black text-ink">تا ۲۰٪ تخفیف</h2>
             <p className="mb-0 mt-2 text-sm font-bold text-muted">بر روی منتخب محصولات</p>
-            <Gift
-              className="absolute bottom-6 left-8 text-brand-950/20"
-              size={110}
-              strokeWidth={1.4}
+            <ImageIcon
+              className="absolute bottom-8 left-10 text-brand-950"
+              size={78}
+              strokeWidth={2.1}
             />
             <Button
               variant="outline"
@@ -1106,16 +1201,15 @@ export function LandingPage() {
             </Button>
           </article>
           <article className="relative min-h-44 overflow-hidden rounded-[20px] bg-brand-800 p-5 text-white sm:min-h-52 sm:rounded-[24px] sm:p-10">
-            <DataSourcePill source="mock" />
-            <h2 className="mb-0 mt-5 max-w-sm text-2xl font-black leading-10">
+            <h2 className="m-0 max-w-sm text-2xl font-black leading-10">
               تجهیزات صنعتی با کیفیت
               <br />
               برای عملکردی بهتر
             </h2>
-            <Factory
-              className="absolute bottom-4 left-7 text-white/15"
-              size={130}
-              strokeWidth={1.2}
+            <ImageIcon
+              className="absolute bottom-8 left-10 text-white"
+              size={78}
+              strokeWidth={2.1}
             />
             <Button
               variant="outline"
@@ -1199,9 +1293,10 @@ export function LandingPage() {
       <CartDrawer
         open={cartOpen}
         items={cartItems}
+        source={profile ? 'api' : 'mock'}
         onClose={() => setCartOpen(false)}
-        onQuantityChange={changeCartQuantity}
-        onCheckout={() => showMockNotice('پرداخت و ثبت سفارش')}
+        onQuantityChange={(id, quantity) => void changeCartQuantity(id, quantity)}
+        onCheckout={() => showMockNotice('انتخاب آدرس، پیش‌نمایش سفارش و پرداخت')}
       />
 
       {notice && (
