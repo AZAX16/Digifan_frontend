@@ -48,9 +48,17 @@ type AppPage =
   | 'account'
   | 'ui-kit'
   | 'landing'
+  | 'storefront-industrial-fans'
+  | 'storefront-electric-motors'
   | 'storefront-water-pumps'
   | 'storefront-accessories'
-type PublicAppPage = 'ui-kit' | 'landing' | 'storefront-water-pumps' | 'storefront-accessories'
+type PublicAppPage =
+  | 'ui-kit'
+  | 'landing'
+  | 'storefront-industrial-fans'
+  | 'storefront-electric-motors'
+  | 'storefront-water-pumps'
+  | 'storefront-accessories'
 type ProtectedAppPage = Exclude<AppPage, PublicAppPage>
 const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
   dashboard: 'پیشخوان مدیریت',
@@ -79,6 +87,8 @@ function getPageFromHash(): AppPage {
 
   if (route === '#/ui-kit') return 'ui-kit'
   if (route === '#/landing') return 'landing'
+  if (route === '#/category/industrial-fans') return 'storefront-industrial-fans'
+  if (route === '#/category/electric-motors') return 'storefront-electric-motors'
   if (route === '#/category/water-pumps') return 'storefront-water-pumps'
   if (route === '#/category/accessories') return 'storefront-accessories'
   if (route === '#/categories') return 'categories'
@@ -142,7 +152,10 @@ function AppContent() {
   const isUIKit = page === 'ui-kit'
   const isLanding = page === 'landing'
   const isStorefront =
-    page === 'storefront-water-pumps' || page === 'storefront-accessories'
+    page === 'storefront-industrial-fans' ||
+    page === 'storefront-electric-motors' ||
+    page === 'storefront-water-pumps' ||
+    page === 'storefront-accessories'
   const isStandalonePublicPage = isLanding || isStorefront
   const isProtectedPage = !isUIKit && !isStandalonePublicPage
   const usesAdminShell =
@@ -159,10 +172,14 @@ function AppContent() {
   const pageLabel =
     isLanding
       ? 'صفحه اصلی فنینو'
-      : page === 'storefront-water-pumps'
-      ? 'پمپ آب'
-      : page === 'storefront-accessories'
-        ? 'تجهیزات جانبی'
+      : page === 'storefront-industrial-fans'
+        ? 'هواکش‌های صنعتی'
+        : page === 'storefront-electric-motors'
+          ? 'الکتروموتور'
+          : page === 'storefront-water-pumps'
+            ? 'پمپ آب'
+            : page === 'storefront-accessories'
+              ? 'تجهیزات جانبی'
         : isUIKit
           ? 'راهنمای رابط کاربری'
           : status === 'authenticated'
@@ -259,6 +276,10 @@ function AppContent() {
           <TestUIKit />
         ) : isLanding ? (
           <LandingPage />
+        ) : page === 'storefront-industrial-fans' ? (
+          <CategoryProductsPage variant="industrial-fans" />
+        ) : page === 'storefront-electric-motors' ? (
+          <CategoryProductsPage variant="electric-motors" />
         ) : page === 'storefront-water-pumps' ? (
           <CategoryProductsPage variant="water-pumps" />
         ) : page === 'storefront-accessories' ? (

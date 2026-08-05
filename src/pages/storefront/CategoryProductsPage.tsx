@@ -15,6 +15,7 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  SquarePlus,
   ShoppingCart,
   Truck,
   UserRound,
@@ -46,10 +47,11 @@ import { Rating } from '../../components/ui/Rating'
 import { SortBar, type SortOption } from '../../components/ui/SortBar'
 import { cn } from '../../utils/cn'
 import { formatCurrencyLabel } from '../../utils/currency'
+import { toPersianDigits } from '../../utils/persianDigits'
 import {
+  categoryNavigationItems,
   categoryProductsConfigs,
   mockBrands,
-  mockProductNames,
   technicalFilters,
   type CategoryProductsVariant,
 } from './categoryProductsData'
@@ -106,18 +108,21 @@ function DataPill({
 }
 
 function StorefrontHeader({
+  activeVariant,
   search,
   onSearchChange,
   onSearchSubmit,
 }: {
+  activeVariant: CategoryProductsVariant
   search: string
   onSearchChange: (value: string) => void
   onSearchSubmit: () => void
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const activeConfig = categoryProductsConfigs[activeVariant]
   const navLinks = [
-    { label: 'صفحه اصلی', href: '#/category/water-pumps' },
-    { label: 'محصولات', href: '#/category/water-pumps', active: true },
+    { label: 'صفحه اصلی', href: '#/landing' },
+    { label: 'محصولات', href: activeConfig.route, active: true },
     { label: 'برندها', href: '#brands' },
     { label: 'خدمات', href: '#services' },
     { label: 'پروژه‌ها', href: '#projects' },
@@ -134,16 +139,16 @@ function StorefrontHeader({
 
   return (
     <header className="border-b border-[#d7d7d7] bg-white" dir="rtl">
-      <div className="mx-auto grid min-h-[84px] max-w-[1360px] grid-cols-[auto_1fr_auto] items-center gap-4 px-4 sm:px-6 lg:grid-cols-[250px_minmax(320px,680px)_250px] lg:gap-10">
+      <div className="mx-auto grid min-h-[84px] max-w-[1360px] grid-cols-[auto_1fr_auto] items-center gap-4 px-4 sm:px-5 lg:grid-cols-[250px_minmax(320px,680px)_250px] lg:gap-10 lg:px-2.5">
         <a
-          href="#/category/water-pumps"
+          href="#/landing"
           className="col-start-1 row-start-1 flex min-w-0 items-center justify-self-start text-brand-950 no-underline lg:col-start-1 lg:justify-self-start"
-          aria-label="صفحه اصلی دیجی‌فن"
+          aria-label="صفحه اصلی فنینو"
         >
           <span className="flex size-10 items-center justify-center rounded-df-sm border-2 border-brand-950">
             <ImageIcon size={23} strokeWidth={2.4} />
           </span>
-          <span className="mr-3 text-xl font-black">نام برند</span>
+          <span className="mr-3 text-xl font-black">فنینو</span>
         </a>
 
         <form
@@ -168,19 +173,19 @@ function StorefrontHeader({
 
         <div className="col-start-3 row-start-1 flex items-center justify-self-end gap-3 lg:col-start-3 lg:justify-self-end" dir="ltr">
           <a
+            href="#/landing"
+            className="hidden h-11 items-center gap-2 rounded-df-sm bg-brand-950 px-4 text-sm font-extrabold text-white no-underline sm:flex"
+          >
+            <UserRound size={20} />
+            ورود / ثبت‌نام
+          </a>
+          <a
             href="#cart"
             aria-label="سبد خرید"
             className="flex size-11 items-center justify-center rounded-df-sm bg-[#eeeeee] text-ink"
             onClick={(event) => event.preventDefault()}
           >
             <ShoppingCart size={27} />
-          </a>
-          <a
-            href="#/admin"
-            className="hidden h-11 items-center gap-2 rounded-df-sm bg-brand-950 px-4 text-sm font-extrabold text-white no-underline sm:flex"
-          >
-            <UserRound size={20} />
-            ورود / ثبت‌نام
           </a>
           <button
             type="button"
@@ -221,18 +226,19 @@ function StorefrontHeader({
               </a>
               {link.active && (
                 <div className="right-0 z-50 hidden min-w-52 rounded-df-md border border-border-soft bg-white p-2 shadow-raised group-hover:block group-focus-within:block lg:absolute lg:top-7">
-                  <a
-                    href="#/category/water-pumps"
-                    className="block rounded-md px-4 py-3 text-sm font-bold text-brand-950 no-underline hover:bg-orange-50 hover:text-accent-500"
-                  >
-                    پمپ آب
-                  </a>
-                  <a
-                    href="#/category/accessories"
-                    className="block rounded-md px-4 py-3 text-sm font-bold text-brand-950 no-underline hover:bg-orange-50 hover:text-accent-500"
-                  >
-                    تجهیزات جانبی
-                  </a>
+                  {categoryNavigationItems.map((item) => (
+                    <a
+                      key={item.key}
+                      href={item.route}
+                      aria-current={item.key === activeVariant ? 'page' : undefined}
+                      className={cn(
+                        'block rounded-md px-4 py-3 text-sm font-bold no-underline hover:bg-orange-50 hover:text-accent-500',
+                        item.key === activeVariant ? 'bg-orange-50 text-accent-500' : 'text-brand-950',
+                      )}
+                    >
+                      {item.label}
+                    </a>
+                  ))}
                 </div>
               )}
             </li>
@@ -245,19 +251,21 @@ function StorefrontHeader({
 
 function CategoryHero({
   variant,
+  totalCount,
   onCtaClick,
 }: {
   variant: CategoryProductsVariant
+  totalCount: number
   onCtaClick: () => void
 }) {
   const config = categoryProductsConfigs[variant]
+  const visibleCount = totalCount > 0 ? totalCount : config.fallbackProductCount
 
   return (
-    <section className="relative grid min-h-[275px] overflow-hidden rounded-[32px] bg-[#001b35] px-6 text-white sm:px-10 lg:grid-cols-[1fr_1.05fr] lg:px-16">
-      <div className="relative z-10 flex min-w-0 flex-col items-start justify-center py-10 text-right lg:items-start">
-        <DataPill kind="mock" className="mb-4 bg-white/10 text-white ring-white/25" />
-        <h1 className="m-0 text-4xl font-black sm:text-5xl">{config.title}</h1>
-        <p className="mb-0 mt-4 max-w-xl text-sm font-medium leading-7 text-[#d7e1ea] sm:text-base">
+    <section className="relative grid min-h-[268px] overflow-hidden rounded-[32px] bg-[#001b35] px-6 text-white sm:px-10 lg:grid-cols-[1fr_1.08fr] lg:px-14">
+      <div className="relative z-10 flex min-w-0 flex-col items-start justify-center py-9 text-right lg:items-start">
+        <h1 className="m-0 text-4xl font-black leading-tight sm:text-5xl">{config.title}</h1>
+        <p className="mb-0 mt-3 max-w-xl text-sm font-medium leading-7 text-[#d7e1ea] sm:text-base">
           {config.description}
           <br />
           {config.supportingText}
@@ -265,7 +273,7 @@ function CategoryHero({
         <Button
           variant="secondary"
           size="lg"
-          className="mt-7 min-w-[250px] rounded-df-md text-white"
+          className="mt-6 min-w-[245px] rounded-df-md text-white"
           leadingIcon={<Search size={22} />}
           onClick={onCtaClick}
         >
@@ -273,21 +281,27 @@ function CategoryHero({
         </Button>
       </div>
 
-      <div className="relative order-first flex min-h-[220px] min-w-0 items-center justify-center lg:order-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(46,132,210,0.34),transparent_63%)]" />
+      <div className="relative order-first flex min-h-[210px] min-w-0 items-center justify-center lg:order-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(46,132,210,0.38),transparent_64%)]" />
         <img
           src={config.heroImage}
           alt={config.heroImageAlt}
-          width={660}
-          height={420}
+          width={768}
+          height={512}
           loading="eager"
           decoding="async"
           fetchPriority="high"
           className={cn(
-            'relative z-10 max-h-[260px] w-full object-contain drop-shadow-[0_24px_22px_rgba(0,0,0,0.32)] lg:max-h-[330px]',
-            variant === 'accessories' && 'scale-[0.92]',
+            'relative z-10 max-h-[250px] w-full object-contain drop-shadow-[0_22px_20px_rgba(0,0,0,0.3)] lg:max-h-[315px]',
+            config.heroImageClassName,
           )}
         />
+        {config.showProductCount && (
+          <span className="absolute bottom-6 right-0 z-20 hidden items-center gap-2 text-sm font-medium text-white/70 lg:flex">
+            تعداد محصولات: {toPersianDigits(String(visibleCount))}
+            <SquarePlus size={19} />
+          </span>
+        )}
       </div>
     </section>
   )
@@ -305,10 +319,7 @@ function SubcategoryStrip({
   return (
     <section className="mt-3 rounded-[24px] border border-[#e4e4e4] bg-white px-5 py-5 shadow-[0_3px_5px_rgba(0,0,0,0.16)]">
       <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="m-0 text-base font-black">دسته‌بندی‌ها</h2>
-          <DataPill kind="mock" />
-        </div>
+        <h2 className="m-0 text-base font-black">دسته‌بندی‌ها</h2>
         <button
           type="button"
           className="border-0 bg-transparent text-xs font-bold text-ink"
@@ -317,7 +328,12 @@ function SubcategoryStrip({
           مشاهده همه
         </button>
       </div>
-      <div className="flex snap-x gap-4 overflow-x-auto pb-2 pt-1 lg:justify-center">
+      <div
+        className={cn(
+          'flex snap-x gap-4 overflow-x-auto pb-2 pt-1',
+          config.subcategories.length <= 5 ? 'lg:justify-center' : 'lg:justify-between',
+        )}
+      >
         {config.subcategories.map((subcategory) => (
           <button
             key={subcategory}
@@ -359,7 +375,6 @@ function ProductCard({
       <Badge className="absolute right-4 top-4 z-10 min-h-6 rounded-md px-3 text-[11px]">
         جدید
       </Badge>
-      <DataPill kind={product.isMock ? 'mock' : 'api'} className="absolute left-4 top-4 z-10" />
 
       <div
         className={cn(
@@ -374,7 +389,10 @@ function ProductCard({
           height={90}
           loading="lazy"
           decoding="async"
-          className="size-[78px] object-contain"
+          className={cn(
+            'object-contain',
+            product.imageSrc ? 'max-h-[150px] max-w-[92%]' : 'size-[78px]',
+          )}
         />
       </div>
 
@@ -456,9 +474,8 @@ function FiltersPanel({
       )}
       aria-label="فیلتر محصولات"
     >
-      <div className="flex items-center justify-between px-5 pt-5">
+      <div className="px-5 pt-5">
         <h2 className="m-0 text-base font-black">فیلتر محصولات</h2>
-        <DataPill kind="api" />
       </div>
 
       <FilterAccordion title="جستجو" defaultOpen className="mt-3 px-3">
@@ -503,8 +520,8 @@ function FiltersPanel({
                 checked={selectedBrand === brand.slug}
                 onChange={() => onBrandChange(brand.slug)}
               />
-              <span className="flex items-center gap-1 text-[10px] text-muted">
-                {brand.isMock && <DataPill kind="mock" />}
+              <span className="sr-only">
+                {brand.isMock ? 'برند نمایشی' : 'برند دریافت‌شده از API'}
               </span>
             </div>
           ))}
@@ -526,7 +543,6 @@ function FiltersPanel({
       {technicalFilters.map((filter) => (
         <FilterAccordion key={filter} title={filter} className="px-3">
           <div className="grid gap-3">
-            <DataPill kind="mock" className="w-fit" />
             {['گزینه اول', 'گزینه دوم', 'گزینه سوم'].map((option) => (
               <Checkbox
                 key={option}
@@ -552,7 +568,6 @@ function PromoCard({
 
   return (
     <section className="relative mt-7 min-h-[310px] overflow-hidden rounded-[22px] bg-[#032039] p-6 text-white shadow-card">
-      <DataPill kind="mock" className="absolute left-4 top-4 bg-white/10 text-white ring-white/25" />
       <h2 className="m-0 mt-10 text-2xl font-black">تجهیزات صنعتی</h2>
       <p className="mb-0 mt-2 text-xl font-black text-[#1ca4e9]">با کیفیت بالا</p>
       <p className="mb-0 mt-1 text-lg font-bold">برای عملکرد بهتر</p>
@@ -583,10 +598,7 @@ function BrandStrip() {
   return (
     <section id="brands" className="mt-12">
       <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="m-0 text-xl font-black">برندهای معتبر</h2>
-          <DataPill kind="mock" />
-        </div>
+        <h2 className="m-0 text-xl font-black">برندهای معتبر</h2>
         <button
           type="button"
           className="flex items-center gap-2 border-0 bg-transparent text-sm font-bold text-ink"
@@ -640,7 +652,6 @@ function ServicesStrip() {
       id="services"
       className="relative mt-10 grid gap-5 rounded-[18px] bg-white px-6 py-7 sm:grid-cols-2 lg:grid-cols-4"
     >
-      <DataPill kind="mock" className="absolute left-4 top-3" />
       {services.map((service, index) => (
         <div
           key={service.title}
@@ -665,8 +676,11 @@ function StorefrontFooter() {
     <footer id="contact" className="mt-3 bg-brand-800 text-white" dir="rtl">
       <div className="border-b border-white/10 bg-[#1e2b35] px-6 py-4">
         <div className="mx-auto flex max-w-[1360px] items-center justify-between">
-          <strong className="text-accent-500">نام برند</strong>
-          <DataPill kind="mock" className="bg-white/10 text-white ring-white/20" />
+          <strong className="text-accent-500">فنینو</strong>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-white/65">
+            <DataPill kind="mock" className="bg-white/10 text-white ring-white/20" />
+            <span>دسته‌بندی‌ها، امتیازها، برندها و خرید نمایشی‌اند؛ اطلاعات محصول و قیمت از API دریافت می‌شود.</span>
+          </div>
         </div>
       </div>
       <div className="mx-auto grid max-w-[1360px] gap-10 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -739,7 +753,7 @@ function StorefrontFooter() {
       </div>
       <div className="bg-[#1f2a33] px-6 py-5 text-xs text-white/45">
         <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3">
-          <span>تمامی حقوق متعلق به نام برند می‌باشد.</span>
+          <span>تمامی حقوق متعلق به فنینو می‌باشد.</span>
           <span dir="ltr">Terms of Service · Privacy Policy</span>
         </div>
       </div>
@@ -756,10 +770,10 @@ function StorefrontFooter() {
 }
 
 function makeMockProducts(variant: CategoryProductsVariant): DisplayProduct[] {
-  const offset = variant === 'accessories' ? 4 : 0
+  const names = categoryProductsConfigs[variant].mockProductNames
 
   return Array.from({ length: PAGE_SIZE }, (_, index) => {
-    const name = mockProductNames[(index + offset) % mockProductNames.length] ?? 'محصول صنعتی'
+    const name = names[index % names.length] ?? 'محصول صنعتی'
     const brand = mockBrands[index % mockBrands.length] ?? mockBrands[0]
 
     return {
@@ -896,6 +910,9 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
   const usesMockProducts = !isLoading && apiProducts.length === 0
   const products = usesMockProducts ? makeMockProducts(variant) : apiProducts
   const totalPages = usesMockProducts ? 3 : Math.max(1, result?.totalPages ?? 1)
+  const visibleProductCount = usesMockProducts
+    ? config.fallbackProductCount
+    : (result?.totalCount ?? config.fallbackProductCount)
 
   const brands = useMemo(() => {
     if (apiProducts.length === 0) {
@@ -947,16 +964,17 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
   return (
     <div id="top" className="min-h-screen overflow-x-hidden bg-[#f7f7f7] text-ink" dir="rtl">
       <StorefrontHeader
+        activeVariant={variant}
         search={searchDraft}
         onSearchChange={handleSearchDraftChange}
         onSearchSubmit={submitSearch}
       />
 
-      <main className="mx-auto max-w-[1360px] px-3 py-4 sm:px-5 lg:px-6">
+      <main className="mx-auto max-w-[1360px] px-3 py-4 sm:px-5 lg:px-1">
         <div className="rounded-[24px] border border-[#dddddd] bg-[#fafafa] p-3 shadow-[0_2px_3px_rgba(0,0,0,0.12)] sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-2 text-xs font-bold text-muted">
             <nav aria-label="مسیر صفحه" className="flex items-center gap-3">
-              <a href="#/category/water-pumps" className="text-inherit no-underline">
+              <a href="#/landing" className="text-inherit no-underline">
                 خانه
               </a>
               <ChevronLeft size={16} />
@@ -964,15 +982,14 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
               <ChevronLeft size={16} />
               <span className="text-ink">{config.title}</span>
             </nav>
-            <div className="flex flex-wrap items-center gap-2" aria-label="راهنمای منبع داده">
-              <DataPill kind="api" />
-              <span>متن، قیمت و فیلترهای عمومی</span>
-              <DataPill kind="mock" />
-              <span>تصویر و اطلاعات تکمیلی</span>
-            </div>
+            <span className="text-ink">{toPersianDigits(String(visibleProductCount))} محصول</span>
           </div>
 
-          <CategoryHero variant={variant} onCtaClick={scrollToProducts} />
+          <CategoryHero
+            variant={variant}
+            totalCount={visibleProductCount}
+            onCtaClick={scrollToProducts}
+          />
           <SubcategoryStrip
             variant={variant}
             onSelect={(value) => {
@@ -1024,8 +1041,14 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
                     options={sortOptions}
                     className="min-w-0 flex-1 border-0 p-0 shadow-none"
                     onChange={(value) => {
-                      setSort(value as SortValue)
+                      const nextSort = value as SortValue
+                      setSort(nextSort)
                       setPage(1)
+                      if (nextSort === 'Popular') {
+                        showMockNotice(
+                          'مرتب‌سازی محبوب‌ترین تا زمان ارائه داده امتیاز و بازدید توسط بک‌اند نمایشی است.',
+                        )
+                      }
                     }}
                   />
                   <div className="flex items-center gap-1 rounded-df-md bg-[#f5f5f5] p-1" dir="ltr">
@@ -1056,30 +1079,6 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
                   </div>
                 </div>
 
-                {sort === 'Popular' && (
-                  <div className="mb-4 flex items-center gap-2 rounded-df-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                    <DataPill kind="mock" />
-                    مرتب‌سازی محبوب‌ترین تا زمان ارائه امتیاز/بازدید توسط بک‌اند نمایشی است.
-                  </div>
-                )}
-
-                {!isLoading && error && (
-                  <div
-                    role="alert"
-                    className="mb-4 rounded-df-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700"
-                  >
-                    اتصال API برقرار نشد: {error} — محصولات نمایشی جایگزین شده‌اند.
-                  </div>
-                )}
-
-                {!error && !isLoading && result?.items.length === 0 && (
-                  <div
-                    role="status"
-                    className="mb-4 rounded-df-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800"
-                  >
-                    API برای این دسته‌بندی محصولی برنگرداند؛ کارت‌های زیر نمایشی‌اند.
-                  </div>
-                )}
 
                 {isLoading ? (
                   <div
@@ -1117,7 +1116,9 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
                         product={product}
                         view={view}
                         onMockAction={() =>
-                          showMockNotice('سبد خرید هنوز API عمومی ندارد و این دکمه نمایشی است.')
+                          showMockNotice(
+                            'سبد خرید در صفحه دسته‌بندی هنوز به نشست مشتری متصل نشده و این دکمه نمایشی است.',
+                          )
                         }
                       />
                     ))}
@@ -1146,12 +1147,12 @@ export function CategoryProductsPage({ variant }: CategoryProductsPageProps) {
 
       <StorefrontFooter />
 
-      {mockNotice && (
+      {(mockNotice || (!isLoading && error)) && (
         <div
-          role="status"
+          role={error ? 'alert' : 'status'}
           className="fixed bottom-5 right-5 z-[80] max-w-sm rounded-df-md bg-brand-950 px-5 py-4 text-sm font-bold text-white shadow-raised"
         >
-          {mockNotice}
+          {error ? 'اتصال API برقرار نشد؛ محصولات نمایشی جایگزین شده‌اند.' : mockNotice}
         </div>
       )}
     </div>
