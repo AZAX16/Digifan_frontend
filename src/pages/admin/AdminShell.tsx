@@ -74,7 +74,11 @@ const navigationItems: NavigationItem[] = [
     icon: PanelsTopLeft,
     section: 'categories',
     href: '#/categories',
-    permissions: [ADMIN_PERMISSIONS.manageCategories, ADMIN_PERMISSIONS.manageBrands],
+    permissions: [
+      ADMIN_PERMISSIONS.manageCategories,
+      ADMIN_PERMISSIONS.manageBrands,
+      ADMIN_PERMISSIONS.manageProducts,
+    ],
   },
   { label: 'پشتیبانی', icon: Headphones, section: 'support', href: '#/admin/support' },
   { label: 'تنظیمات پروفایل', icon: Settings, section: 'account', href: '#/admin/account' },

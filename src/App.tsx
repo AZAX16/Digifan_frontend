@@ -69,7 +69,11 @@ const authenticatedPageLabels: Record<ProtectedAppPage, string> = {
 }
 const protectedPagePermissions: Partial<Record<ProtectedAppPage, readonly AdminPermission[]>> = {
   products: [ADMIN_PERMISSIONS.manageProducts],
-  categories: [ADMIN_PERMISSIONS.manageCategories, ADMIN_PERMISSIONS.manageBrands],
+  categories: [
+    ADMIN_PERMISSIONS.manageCategories,
+    ADMIN_PERMISSIONS.manageBrands,
+    ADMIN_PERMISSIONS.manageProducts,
+  ],
 }
 
 function preloadProtectedPage(page: ProtectedAppPage) {
@@ -244,6 +248,7 @@ function AppContent() {
                 hasAnyAdminPermission(profile, [
                   ADMIN_PERMISSIONS.manageCategories,
                   ADMIN_PERMISSIONS.manageBrands,
+                  ADMIN_PERMISSIONS.manageProducts,
                 ]) && (
                 <Button
                   size="sm"

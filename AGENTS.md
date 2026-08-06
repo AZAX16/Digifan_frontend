@@ -1,6 +1,6 @@
 # DigiFan Project Handoff
 
-> Last updated: 2026-08-02
+> Last updated: 2026-08-06
 > Purpose: this is the authoritative handoff for developers and coding agents. Read it before changing the project and update it whenever routes, API contracts, mock/real boundaries, deployment behavior, or major TODOs change.
 
 ## Current snapshot
@@ -9,22 +9,22 @@
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
 - Working branch: `feat/admin-page`
-- Base commit before the current uncommitted API/UI update: `5765df1` (`feat: small fix on icons`)
+- Base commit before the current uncommitted Excel-import update: `b94532e` (`feat: added all category pages`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted API-contract migration and requested admin/storefront fixes described below.
-- Suggested commit message for the current work: `fix(app): harden API state and optimize admin bundles`
+- The working tree intentionally contains the uncommitted content-management Excel/manual product-import workflow described below.
+- Suggested commit message for the current work: `feat(admin): add Excel product import workflow`
 
 The latest supplied OpenAPI document is:
 
 ```text
-C:\Users\ToosArax\.codex\attachments\6c1da119-d987-43a9-aed5-ddc0d40911dc\pasted-text.txt
+C:\Users\ToosArax\.codex\attachments\1f104277-844b-4ee7-8c8d-f57a8388556a\pasted-text.txt
 ```
 
 It describes OpenAPI 3.0.1, `DigiFan.Backend.API` version `1.0`. Treat it as the current contract unless the user provides a newer document.
 
 ## Product and architecture
 
-DigiFan is an RTL Persian SPA with an authenticated administration area, a public UI-kit showcase, a public Fanino landing page, and two public Figma-derived category storefront pages.
+DigiFan is an RTL Persian SPA with an authenticated administration area, a public UI-kit showcase, a public Fanino landing page, and four public Figma-derived category storefront pages.
 
 Technology:
 
@@ -71,11 +71,13 @@ public                  Favicon and robots.txt
 |---|---|---|
 | `#/admin` | Authenticated | Real API-backed dashboard counts; several visual/business metrics remain derived or placeholder |
 | `#/admin/products` | `catalog.products.manage` | Real product CRUD, filters, moderation, and pagination; price/stock are supplied on create and read-only afterward |
-| `#/categories` | `catalog.categories.manage` or `catalog.brands.manage` | Real category and brand CRUD; each tab is shown only when its permission is present |
+| `#/categories` | `catalog.categories.manage`, `catalog.brands.manage`, or `catalog.products.manage` | Permission-aware category CRUD, brand CRUD, and Excel/manual product creation; the active view/mode is preserved in the hash query |
 | `#/admin/support` | Authenticated | Mock/local ticket workspace plus real review list/reply when `reports.reviews.view` is present |
 | `#/admin/account` | Authenticated | Real profile, phone change, password change, and logout |
 | `#/ui-kit` | Public | Living component showcase; intentionally backend-free |
 | `#/landing` | Public | Responsive Fanino landing page; real customer auth and storefront product search/list with clearly labeled mock commerce/merchandising sections |
+| `#/category/industrial-fans` | Public | Responsive industrial-fan storefront; public products API with labeled mock fallbacks |
+| `#/category/electric-motors` | Public | Responsive electric-motor storefront; public products API with labeled mock fallbacks |
 | `#/category/water-pumps` | Public | Responsive water-pump storefront; public products API with labeled mock fallbacks |
 | `#/category/accessories` | Public | Responsive accessories storefront; public products API with labeled mock fallbacks |
 | Empty or unknown hash | Protected | Resolves to the admin dashboard/login |
@@ -168,7 +170,7 @@ reports.visitors.view
 Current UI mapping:
 
 - Product moderation, product visibility, and global product search require `catalog.products.manage`.
-- Content management is visible with either `catalog.categories.manage` or `catalog.brands.manage`; each tab is permission-gated independently.
+- Content management is visible with category, brand, or product-management permission; category, brand, and product-import tabs are permission-gated independently.
 - Brand CRUD and dashboard brand counts require `catalog.brands.manage`.
 - Product review listing and replies require `reports.reviews.view`.
 - Dashboard remains available to every authenticated administrator, but it only calls and renders catalog resources permitted for that account.
@@ -187,6 +189,7 @@ Restricted sidebar/mobile options are hidden. Direct navigation to a restricted 
 - Same-origin `/api` calls by default
 - Optional `VITE_API_BASE_URL`
 - JSON request/response handling
+- Native FormData/multipart upload handling without overriding the browser-generated boundary
 - 30-second timeout
 - Caller abort forwarding
 - Bounded, user-friendly API errors
@@ -290,6 +293,17 @@ The base-product editor validates and edits SKU, price, stock, reorder point, an
 
 Image management includes URL/alt text, primary selection, deletion, and ordered movement. The current API accepts image URLs rather than uploaded files and no longer associates images with variants.
 
+### Admin product workbook import
+
+`src/api/productImports.ts` and the lazy-loaded `ProductImportPanel` support:
+
+- `POST /api/admin/product-imports/{parentCategoryId}` with multipart field `file`
+- Validated result counts: `created`, `updated`, `archived`, `deleted`, and `unchanged`
+
+The `#/categories?view=product-import` tab requires `catalog.products.manage`. Excel mode loads main categories when `catalog.categories.manage` is present, requires a rules-acceptance checkbox, accepts only non-empty `.xlsx` files, submits the selected main-category ID, and renders the server result. Manual mode reuses the existing real product editor and additionally needs category and brand permissions/options.
+
+The download link intentionally serves the user-supplied `public/downloads/fanino-product-import-template.zip`, not the API template endpoint. The ZIP contains `دسته بندی.xlsx` with ten fixed product columns, exactly eleven renameable attribute columns, and these workbook validation labels: `فعال`, `غیرفعال`, `ناموجود`, `توقف`, `بایگانی`, `پیش‌نویس`, and `پاک‌کردن`.
+
 ### Admin product reviews
 
 `src/api/reviews.ts` supports:
@@ -351,6 +365,7 @@ The live backend check on 2026-07-30 returned one public product under category 
 - Product create/edit/delete/duplicate
 - Product publication/status actions
 - Product create/edit with SKU, price, stock quantity, reorder point, and arbitrary attributes
+- Excel product import for a selected main category, including real server result counts
 
 - Product image add/edit/delete, primary selection, and reordering
 - Category CRUD and hierarchy management
@@ -427,6 +442,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Dashboard skips product/category/brand requests that the current permission set does not allow, avoiding predictable 403 responses and unnecessary work.
 - Product lists use server pagination.
 - The product editor and image-management workspace are separate on-demand chunks; browsing/filtering moderation no longer downloads either editor, and removed variant code no longer ships.
+- The product-import panel is a separate lazy chunk; brand data is not requested in Excel mode and the manual editor remains a nested on-demand chunk.
 - Dialog focus trapping, Escape handling, scroll locking, and focus restoration share one lazy module instead of being duplicated across route chunks.
 - Completed countdowns unsubscribe from the shared one-second clock so expired offers do not keep background timer work alive.
 - The public category route is lazy-loaded as its own chunk.
@@ -529,7 +545,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-08-02 after the latest OpenAPI migration, requested UI fixes, and project-wide bug/performance audit:
+Verified on 2026-08-06 after adding the content-management Excel/manual product workflow:
 
 ```text
 npm run check: PASS
@@ -538,9 +554,9 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-The full `npm run check` pipeline passed on 2026-08-02 after the audit. The audit fixed password digit mutation, stale cleared-search state, review reply carryover across pages, category storefront image omission, stale route descriptions, expired countdown subscriptions, modal keyboard/scroll lifecycle, repeated number-formatter construction, and malformed paginated-response crashes; it also moved the product editor behind a lazy boundary. A local headless Edge smoke run after the final build rendered `#/landing`, `#/category/water-pumps`, `#/ui-kit`, and the logged-out `#/admin` login route successfully. In the prior storefront QA, the public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
+The full `npm run build` pipeline (ESLint, both TypeScript projects, and Vite production build) passed on 2026-08-06 after the Excel-import implementation. The import panel is emitted as a separate 22.65 kB raw / 7.43 kB gzip chunk and the existing manual product editor remains separately lazy-loaded. The authenticated import mutation was not run against production because it can change catalog data. The prior audit fixed password digit mutation, stale cleared-search state, review reply carryover across pages, category storefront image omission, stale route descriptions, expired countdown subscriptions, modal keyboard/scroll lifecycle, repeated number-formatter construction, and malformed paginated-response crashes; it also moved the product editor behind a lazy boundary. A local headless Edge smoke run after the final build rendered `#/landing`, `#/category/water-pumps`, `#/ui-kit`, and the logged-out `#/admin` login route successfully. In the prior storefront QA, the public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
 
-Earlier live authentication/profile checks confirmed role `super-admin` plus the expected permission array and paginated brand/review responses. The 2026-08-02 OpenAPI was verified directly for the new base-product fields, removal of variants/image associations, and customer cart item migration from `productVariantId` to `productId`; no authenticated live mutation was run for this update. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
+Earlier live authentication/profile checks confirmed role `super-admin` plus the expected permission array and paginated brand/review responses. The latest supplied OpenAPI was verified directly for the new base-product fields, removal of variants/image associations, and customer cart item migration from `productVariantId` to `productId`; no authenticated live mutation was run for this update. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
 
 Before merging/deploying, manually verify in a browser:
 
@@ -561,6 +577,8 @@ Before merging/deploying, manually verify in a browser:
 15. One account from each lower permission set: hidden navigation, direct-route denial, and dashboard partial-data behavior.
 16. Landing-page customer register/login/refresh/logout with a real customer account.
 17. Landing-page default product loading, immediate search clearing, mobile menu/layout, and local demo cart behavior.
+18. Content-management Excel rules modal, required acceptance, supplied ZIP download, `.xlsx` selection, main-category selection, and one authorized import against disposable test data.
+19. Manual mode opening the existing product editor and saving a test product.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -573,7 +591,8 @@ Each item is intentionally one line:
 - **Brand response schema:** Document the successful `GET /api/admin/Brands` response shape in OpenAPI.
 
 
-- **Permission mapping:** Document the permission claim required by each protected operation, including reviews and replies.
+- **Permission mapping:** Document the permission claim required by each protected operation, including reviews, replies, and product workbook imports.
+- **Product-import contract:** Document the exact image-URL separator, file-size/row limits, partial-failure behavior, validation errors, and successful template-download response type.
 - **Admin product sort enum:** Publish and consistently implement the accepted admin `Sort` values.
 - **Phone format:** Document and validate the canonical admin phone-number format with examples.
 - **Support APIs:** Add ticket list/detail/search/reply/assignment/status endpoints to replace the mock support page.
@@ -622,39 +641,24 @@ Each item is intentionally one line:
 - Hash routing is unsuitable for public SEO and maps unknown hashes to the dashboard.
 - UI Kit is publicly reachable even though it is noindexed.
 - Frontend auth guards are not security boundaries; the backend must authorize every admin endpoint.
+- Product import uses the selected main category ID as `parentCategoryId`; the uploaded body field must remain named `file` and the browser must generate the multipart boundary.
+- The Excel template link is a static user-supplied ZIP; replace it only when an approved newer workbook is provided or the backend template endpoint is designated authoritative.
 
 ## Current uncommitted change set
 
-At the time this handoff was written, the current API/UI update is:
+At the time this handoff was updated, the Excel/manual product-import change set is:
 
 ```text
 AGENTS.md
+public/downloads/fanino-product-import-template.zip (new; byte-identical copy of the supplied ZIP)
 src/App.tsx
-src/api/brands.ts
-src/api/categories.ts
-src/api/customerAuth.ts
-src/api/pageResponse.ts (new)
-src/api/productAssets.ts
-src/api/products.ts
-src/api/reviews.ts
-src/api/storefrontProducts.ts
-src/components/ui/Countdown.tsx
-src/components/ui/Field.tsx
-src/hooks/useDialogLifecycle.ts (new)
+src/api/client.ts
+src/api/productImports.ts (new)
 src/pages/admin/AdminCategoriesPage.tsx
-src/pages/admin/AdminDashboardPage.tsx
-src/pages/admin/AdminModerationPage.tsx
-src/pages/admin/AdminReviewsPanel.tsx
-src/pages/admin/AdminSupportPage.tsx
-src/pages/admin/ProductAssetsDialog.tsx
-src/pages/admin/ProductEditorDialog.tsx
-src/pages/admin/ProductImagesPanel.tsx
-src/pages/admin/ProductVariantsPanel.tsx (deleted)
-src/pages/categories/CategoriesManagerPage.tsx
-src/pages/storefront/CategoryProductsPage.tsx
-src/pages/storefront/LandingPage.tsx
+src/pages/admin/AdminShell.tsx
+src/pages/admin/ProductImportPanel.tsx (new)
 ```
 
-The update aligns products/images with the newest OpenAPI, adds dashboard out-of-stock navigation/charting with equal-height metric cards and separated progress bars, persists admin content/support tabs in hash parameters, replaces parent-category wording with main/subcategory wording, fixes storefront category/brand border clipping, clears submitted searches when their fields are erased, tightens mobile landing sizing, and applies the project-wide robustness/performance audit summarized in the validation section.
+The update adds a permission-aware «افزودن محصول» content tab with Excel/manual modes, a required rules dialog, the supplied template download, main-category selection, accessible `.xlsx` drag/drop selection, real multipart import submission/result counts, and reuse of the existing lazy manual product editor. It also updates the shared HTTP client so `FormData` requests preserve the browser-generated multipart boundary.
 
 Do not discard unrelated existing changes. After committing, update this section with the new commit hash and change the working-tree note near the top.
