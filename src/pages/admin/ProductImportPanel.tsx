@@ -42,7 +42,8 @@ const ProductEditorDialog = lazy(() =>
 type ProductCreationMode = 'excel' | 'manual'
 type Feedback = { variant: 'success' | 'danger' | 'warning'; title: string } | null
 
-const TEMPLATE_URL = '/downloads/fanino-product-import-template.zip'
+const TEMPLATE_URL = '/downloads/fanino-product-import-template.xlsx'
+const RULES_ACCEPTED_STORAGE_KEY = 'digifan.product-import.rules-accepted.v1'
 const workbookStatuses = [
   { label: 'فعال', description: 'محصول فعال و قابل نمایش' },
   { label: 'غیرفعال', description: 'محصول ثبت‌شده ولی غیرفعال' },
@@ -64,6 +65,22 @@ const resultItems: {
   { key: 'unchanged', label: 'بدون تغییر', className: 'bg-[#fff8e9] text-[#825313]' },
 ]
 const fileSizeFormatter = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 1 })
+
+function getStoredRulesAcceptance() {
+  try {
+    return window.sessionStorage.getItem(RULES_ACCEPTED_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function storeRulesAcceptance() {
+  try {
+    window.sessionStorage.setItem(RULES_ACCEPTED_STORAGE_KEY, 'true')
+  } catch {
+    // The current page can still retain acceptance when session storage is unavailable.
+  }
+}
 
 function getInitialMode(): ProductCreationMode {
   const queryString = window.location.hash.split('?')[1] ?? ''
@@ -100,7 +117,7 @@ function RulesContent() {
           ساختار فایل ثابت است؛ <strong className="text-ink">افزودن، حذف، جابه‌جایی یا تغییر نام ستون‌های اصلی مجاز نیست.</strong>
         </li>
         <li>
-          برای ثبت تصویر، URL عمومی تصویر را در ستون «عکس‌ها» قرار دهید. URL اول تصویر اصلی و URLهای اضافه در همان خانه، تصاویر ثانویه محصول هستند.
+          برای ثبت تصویر، URL عمومی تصویر را در ستون «عکس‌ها» قرار دهید. URL اول تصویر اصلی و URLهای اضافه در همان خانه، تصاویر ثانویه محصول هستند؛ URLها را با علامت <strong className="text-ink">;</strong> از هم جدا کنید.
         </li>
         <li>
           برای حذف یک رکورد موجود، مقدار ستون «وضعیت» همان ردیف را دقیقاً به <strong className="text-danger-600">«پاک‌کردن»</strong> تغییر دهید.
@@ -115,7 +132,7 @@ function RulesContent() {
           مقادیر ستون «وضعیت» باید دقیقاً یکی از برچسب‌های تعریف‌شده پایین باشد. فاصله یا املای برچسب‌ها را تغییر ندهید.
         </li>
         <li>
-          فایل دانلودی ZIP است؛ ابتدا آن را باز کنید و فقط فایل <strong className="text-ink">دسته بندی.xlsx</strong> را برای ثبت نهایی بارگذاری کنید.
+          فایل نمونه با فرمت <strong className="text-ink">.xlsx</strong> دانلود می‌شود؛ پس از تکمیل اطلاعات، همان فایل را برای ثبت نهایی بارگذاری کنید.
         </li>
       </ol>
 
@@ -136,11 +153,11 @@ function RulesContent() {
 
       <a
         className="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-lg bg-accent-500 px-4 font-black text-brand-950 shadow-[0_4px_10px_rgba(255,132,26,0.24)] transition-colors hover:bg-[#ff9d45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
-        download
+        download="دسته بندی.xlsx"
         href={TEMPLATE_URL}
       >
         <Download aria-hidden="true" size={18} />
-        دانلود فایل نمونه اکسل (ZIP)
+        دانلود فایل نمونه اکسل
       </a>
     </div>
   )
@@ -230,13 +247,12 @@ export function ProductImportPanel() {
   const [brands, setBrands] = useState<Brand[]>([])
   const [categoriesResolved, setCategoriesResolved] = useState(false)
   const [brandsResolved, setBrandsResolved] = useState(false)
-  const [rulesAccepted, setRulesAccepted] = useState(false)
-  const [showRules, setShowRules] = useState(() => getInitialMode() === 'excel')
+  const [rulesAccepted, setRulesAccepted] = useState(getStoredRulesAcceptance)
+  const [showRules, setShowRules] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const [showManualEditor, setShowManualEditor] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [result, setResult] = useState<ProductWorkbookImportResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -310,7 +326,7 @@ export function ProductImportPanel() {
     }
     if (!file.name.toLocaleLowerCase('en-US').endsWith('.xlsx')) {
       setSelectedFile(null)
-      setFeedback({ variant: 'danger', title: 'فقط فایل اکسل با پسوند .xlsx قابل ارسال است؛ خود فایل ZIP را بارگذاری نکنید.' })
+      setFeedback({ variant: 'danger', title: 'فقط فایل اکسل با پسوند .xlsx قابل ارسال است.' })
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
@@ -330,7 +346,7 @@ export function ProductImportPanel() {
     setFeedback(null)
     updateModeHash(nextMode)
 
-    if (nextMode === 'excel') setShowRules(true)
+    if (nextMode === 'excel' && !rulesAccepted) setShowRules(true)
   }
 
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
@@ -355,7 +371,7 @@ export function ProductImportPanel() {
     try {
       const nextResult = await importProductsWorkbook(selectedCategoryId, selectedFile)
       setResult(nextResult)
-      setFeedback({ variant: 'success', title: 'فایل با موفقیت پردازش شد و نتیجه نهایی از سرور دریافت شد.' })
+      setFeedback({ variant: 'success', title: 'فایل با موفقیت پردازش شد و نتیجه نهایی دریافت شد.' })
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (error) {
@@ -366,7 +382,6 @@ export function ProductImportPanel() {
   }
 
   const handleManualSaved = useCallback(() => {
-    setShowManualEditor(false)
     setFeedback({ variant: 'success', title: 'محصول با فرم دستی با موفقیت ثبت شد.' })
   }, [])
 
@@ -447,6 +462,7 @@ export function ProductImportPanel() {
                   <Dropdown
                     disabled={!canManageCategories || categoriesLoading || isUploading}
                     label="دسته‌بندی اصلی فایل"
+                    required
                     options={categoryOptions}
                     placeholder={categoriesLoading ? 'در حال دریافت دسته‌بندی‌ها…' : 'یک دسته‌بندی اصلی انتخاب کنید'}
                     hint={
@@ -496,7 +512,7 @@ export function ProductImportPanel() {
                         {selectedFile ? selectedFile.name : 'فایل اکسل را انتخاب کنید یا اینجا رها کنید'}
                       </span>
                       <span className="mt-1 block text-xs text-muted">
-                        {selectedFile ? formatFileSize(selectedFile.size) : 'فقط فرمت .xlsx — فایل ZIP را ابتدا باز کنید'}
+                        {selectedFile ? formatFileSize(selectedFile.size) : 'فقط فرمت .xlsx'}
                       </span>
                     </span>
                   </label>
@@ -534,7 +550,7 @@ export function ProductImportPanel() {
                     </p>
                     <a
                       className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-brand-950 bg-white px-3 text-xs font-black text-brand-950 transition-colors hover:bg-brand-950 hover:text-white focus-visible:outline-2 focus-visible:outline-accent-500"
-                      download
+                      download="دسته بندی.xlsx"
                       href={TEMPLATE_URL}
                     >
                       <Download aria-hidden="true" size={17} />
@@ -574,40 +590,33 @@ export function ProductImportPanel() {
               )}
             </div>
           ) : (
-            <section className="grid gap-5" aria-labelledby="manual-product-title">
-              <div className="grid gap-4 rounded-xl border border-border-soft bg-[#fbfbfc] p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center sm:p-7">
-                <div className="flex items-start gap-3">
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#e9ecef] text-brand-950">
-                    <PencilLine aria-hidden="true" size={24} />
-                  </span>
-                  <div>
-                    <h3 id="manual-product-title" className="m-0 text-lg font-black text-ink">ثبت دستی یک محصول</h3>
-                    <p className="mb-0 mt-2 max-w-2xl text-sm leading-7 text-muted">
-                      برای ثبت تکی، فرم کامل نام، دسته‌بندی، برند، قیمت، موجودی، نقطه سفارش و ویژگی‌های محصول باز می‌شود.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  disabled={!canUseManualEditor || categoriesLoading || brandsLoading || categories.length === 0 || brands.length === 0}
-                  leadingIcon={<PackagePlus aria-hidden="true" size={18} />}
-                  title={
-                    !canUseManualEditor
-                      ? 'برای فرم دستی، مجوز مدیریت دسته‌بندی‌ها و برندها لازم است'
-                      : categories.length === 0 || brands.length === 0
-                        ? 'ابتدا حداقل یک دسته‌بندی و برند بسازید'
-                        : 'باز کردن فرم افزودن محصول'
-                  }
-                  variant="secondary"
-                  onClick={() => setShowManualEditor(true)}
-                >
-                  باز کردن فرم دستی
-                </Button>
-              </div>
-
+            <section className="grid gap-5" aria-label="ثبت دستی محصول">
               {!canUseManualEditor && (
                 <Alert title="برای ثبت دستی، علاوه بر مدیریت محصول به مجوز مدیریت دسته‌بندی‌ها و برندها نیاز دارید." variant="warning" />
               )}
-              <Alert title="ثبت دستی از همان API واقعی محصولات و همان فرم مدیریت موجودی استفاده می‌کند." variant="info" />
+              {canUseManualEditor && (categoriesLoading || brandsLoading) && (
+                <Alert title="در حال دریافت دسته‌بندی‌ها و برندها…" variant="warning" />
+              )}
+              {canUseManualEditor && !categoriesLoading && !brandsLoading && (categories.length === 0 || brands.length === 0) && (
+                <Alert title="برای ثبت محصول، ابتدا حداقل یک دسته‌بندی و یک برند بسازید." variant="warning" />
+              )}
+              {canUseManualEditor && (
+                <Suspense
+                  fallback={(
+                    <Surface elevation="flat" padding="lg">
+                      <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی فرم محصول…</p>
+                    </Surface>
+                  )}
+                >
+                  <ProductEditorDialog
+                    brands={brands}
+                    categories={categories}
+                    presentation="inline"
+                    target={{ mode: 'create' }}
+                    onSaved={handleManualSaved}
+                  />
+                </Suspense>
+              )}
             </section>
           )}
         </div>
@@ -617,31 +626,12 @@ export function ProductImportPanel() {
         <RulesDialog
           accepted={rulesAccepted}
           onAccept={() => {
+            storeRulesAcceptance()
             setRulesAccepted(true)
             setShowRules(false)
           }}
           onClose={() => setShowRules(false)}
         />
-      )}
-
-      {showManualEditor && canUseManualEditor && categories.length > 0 && brands.length > 0 && (
-        <Suspense
-          fallback={(
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand-950/45 p-4 backdrop-blur-sm" dir="rtl">
-              <Surface elevation="raised" padding="lg">
-                <p className="m-0 text-sm font-bold text-brand-950">در حال آماده‌سازی فرم محصول…</p>
-              </Surface>
-            </div>
-          )}
-        >
-          <ProductEditorDialog
-            brands={brands}
-            categories={categories}
-            target={{ mode: 'create' }}
-            onClose={() => setShowManualEditor(false)}
-            onSaved={handleManualSaved}
-          />
-        </Suspense>
       )}
     </main>
   )

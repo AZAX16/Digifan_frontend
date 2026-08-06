@@ -18,6 +18,7 @@ export interface DropdownProps {
   hint?: string
   error?: string
   disabled?: boolean
+  required?: boolean
   className?: string
 }
 
@@ -44,6 +45,7 @@ export function Dropdown({
   hint,
   error,
   disabled = false,
+  required = false,
   className,
 }: DropdownProps) {
   const id = useId()
@@ -120,7 +122,12 @@ export function Dropdown({
 
   return (
     <div ref={rootRef} className={cn('relative grid gap-1.5', className)}>
-      {label && <span className="text-sm font-bold text-ink">{label}</span>}
+      {label && (
+        <span className="text-sm font-bold text-ink">
+          {label}
+          {required && <span aria-hidden="true" className="mr-1 text-danger-600">*</span>}
+        </span>
+      )}
       <button
         ref={triggerRef}
         id={id}
@@ -130,6 +137,7 @@ export function Dropdown({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-describedby={descriptionId}
+
         aria-label={label ? `${label}: ${selectedOption?.label ?? placeholder}` : undefined}
         data-invalid={error ? true : undefined}
         className={cn(

@@ -77,6 +77,7 @@ function CategoryDropdownDemo() {
   return (
     <Dropdown
       label="دسته‌بندی"
+      required
       value={category}
       onChange={setCategory}
       options={categoryOptions}

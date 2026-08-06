@@ -23,8 +23,9 @@ interface ProductEditorDialogProps {
   target: ProductEditorTarget
   categories: Category[]
   brands: Brand[]
-  onClose: () => void
+  onClose?: () => void
   onSaved: () => void
+  presentation?: 'dialog' | 'inline'
 }
 
 interface AttributeRow {
@@ -46,6 +47,7 @@ interface ProductForm {
 }
 
 let attributeRowId = 0
+const noop = () => undefined
 
 function createAttributeRow(key = '', value = ''): AttributeRow {
   attributeRowId += 1
@@ -130,8 +132,9 @@ export function ProductEditorDialog({
   target,
   categories,
   brands,
-  onClose,
+  onClose = noop,
   onSaved,
+  presentation = 'dialog',
 }: ProductEditorDialogProps) {
   const [form, setForm] = useState<ProductForm>(() =>
     target.mode === 'create' ? createEmptyForm() : productToForm(target.product),
@@ -219,6 +222,10 @@ export function ProductEditorDialog({
       if (target.mode === 'edit') await updateProduct(target.product.id, input)
       else await createProduct(input)
 
+      if (presentation === 'inline' && target.mode === 'create') {
+        setForm(createEmptyForm())
+        setIsSaving(false)
+      }
       onSaved()
     } catch (error) {
       setFeedback(getActionError(error))
@@ -227,25 +234,31 @@ export function ProductEditorDialog({
   }
 
   const isBusy = isLoadingDetails || isSaving
-  useDialogLifecycle(dialogRef, onClose, { closeDisabled: isBusy })
+  const isDialog = presentation === 'dialog'
+  useDialogLifecycle(dialogRef, onClose, { closeDisabled: isBusy, open: isDialog })
 
   useEffect(() => {
-    if (!isBusy && document.activeElement === dialogRef.current) {
+    if (isDialog && !isBusy && document.activeElement === dialogRef.current) {
       dialogRef.current?.querySelector<HTMLInputElement>('input:not([disabled])')?.focus()
     }
-  }, [isBusy])
+  }, [isBusy, isDialog])
 
   return (
-    <div className="fixed inset-0 z-[80] overflow-y-auto bg-brand-950/45 px-4 py-8 backdrop-blur-sm" dir="rtl">
+    <div
+      className={isDialog
+        ? 'fixed inset-0 z-[80] overflow-y-auto bg-brand-950/45 px-4 py-8 backdrop-blur-sm'
+        : undefined}
+      dir="rtl"
+    >
       <Surface
         ref={dialogRef}
-        tabIndex={-1}
+        tabIndex={isDialog ? -1 : undefined}
         aria-labelledby="product-editor-title"
-        className="mx-auto max-w-3xl"
-        elevation="raised"
+        className={isDialog ? 'mx-auto max-w-3xl' : 'w-full border border-border-soft bg-[#fbfbfc]'}
+        elevation={isDialog ? 'raised' : 'flat'}
         padding="lg"
-        role="dialog"
-        aria-modal="true"
+        role={isDialog ? 'dialog' : undefined}
+        aria-modal={isDialog ? true : undefined}
       >
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-border-soft pb-4">
           <div>
@@ -254,9 +267,11 @@ export function ProductEditorDialog({
               {target.mode === 'edit' ? 'ویرایش محصول' : 'افزودن محصول'}
             </h2>
           </div>
-          <Button disabled={isBusy} size="sm" variant="ghost" onClick={onClose}>
-            بستن
-          </Button>
+          {isDialog && (
+            <Button disabled={isBusy} size="sm" variant="ghost" onClick={onClose}>
+              بستن
+            </Button>
+          )}
         </div>
 
         {feedback && <Alert className="mb-5" live title={feedback} variant="danger" />}
@@ -429,9 +444,11 @@ export function ProductEditorDialog({
             <Button loading={isSaving} type="submit">
               {target.mode === 'edit' ? 'ذخیره تغییرات' : 'ساخت محصول'}
             </Button>
-            <Button disabled={isBusy} variant="outline" onClick={onClose}>
-              انصراف
-            </Button>
+            {isDialog && (
+              <Button disabled={isBusy} variant="outline" onClick={onClose}>
+                انصراف
+              </Button>
+            )}
           </div>
         </form>
       </Surface>

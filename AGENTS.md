@@ -9,10 +9,10 @@
 - Production frontend: `https://digifan-frontend.vercel.app`
 - Backend: `https://digifan-api.onrender.com`
 - Working branch: `feat/admin-page`
-- Base commit before the current uncommitted Excel-import update: `b94532e` (`feat: added all category pages`)
+- Base commit before the current uncommitted Excel-import refinement: `fb18943` (`feat: added excel file support for moderation page`)
 - Both Git remotes, `origin` and `Digifan`, currently point to the same repository.
-- The working tree intentionally contains the uncommitted content-management Excel/manual product-import workflow described below.
-- Suggested commit message for the current work: `feat(admin): add Excel product import workflow`
+- The working tree intentionally contains the uncommitted Excel/manual product-import refinements described below.
+- Suggested commit message for the current work: `fix(admin): refine product import workflow`
 
 The latest supplied OpenAPI document is:
 
@@ -300,9 +300,9 @@ Image management includes URL/alt text, primary selection, deletion, and ordered
 - `POST /api/admin/product-imports/{parentCategoryId}` with multipart field `file`
 - Validated result counts: `created`, `updated`, `archived`, `deleted`, and `unchanged`
 
-The `#/categories?view=product-import` tab requires `catalog.products.manage`. Excel mode loads main categories when `catalog.categories.manage` is present, requires a rules-acceptance checkbox, accepts only non-empty `.xlsx` files, submits the selected main-category ID, and renders the server result. Manual mode reuses the existing real product editor and additionally needs category and brand permissions/options.
+The `#/categories?view=product-import` tab requires `catalog.products.manage`. Excel mode loads main categories when `catalog.categories.manage` is present, marks the main-category selector as required, requires rules acceptance, accepts only non-empty `.xlsx` files, submits the selected main-category ID, and renders the server result. The rules dialog no longer opens when the product-import view mounts: it opens when an unaccepted user clicks the Excel tab or explicitly chooses to view the rules. Acceptance is retained in `sessionStorage` for the rest of that browser-tab session. Manual mode renders the shared real product editor directly inside the tab and additionally needs category and brand permissions/options.
 
-The download link intentionally serves the user-supplied `public/downloads/fanino-product-import-template.zip`, not the API template endpoint. The ZIP contains `دسته بندی.xlsx` with ten fixed product columns, exactly eleven renameable attribute columns, and these workbook validation labels: `فعال`, `غیرفعال`, `ناموجود`, `توقف`, `بایگانی`, `پیش‌نویس`, and `پاک‌کردن`.
+The download link intentionally serves the user-supplied `public/downloads/fanino-product-import-template.xlsx`, not the API template endpoint. It is a byte-identical copy of `C:UsersToosAraxDownloadsTelegram Desktopدسته بندی (2).xlsx` (10,836 bytes; SHA-256 `748F76788B5D1491AEC9DA3AC6358F38DD0468BBB5C42C69EED4295B04774D8E`). The workbook has ten fixed product columns, exactly eleven renameable attribute columns, and these validation labels: `فعال`, `غیرفعال`, `ناموجود`, `توقف`, `بایگانی`, `پیش‌نویس`, and `پاک‌کردن`. Multiple image URLs in the `عکس‌ها` cell must be separated with `;`.
 
 ### Admin product reviews
 
@@ -442,7 +442,7 @@ PriceRange, ProductCard, Rating, Skeleton, SortBar, Surface, Switch
 - Dashboard skips product/category/brand requests that the current permission set does not allow, avoiding predictable 403 responses and unnecessary work.
 - Product lists use server pagination.
 - The product editor and image-management workspace are separate on-demand chunks; browsing/filtering moderation no longer downloads either editor, and removed variant code no longer ships.
-- The product-import panel is a separate lazy chunk; brand data is not requested in Excel mode and the manual editor remains a nested on-demand chunk.
+- The product-import panel is a separate lazy chunk; brand data is not requested in Excel mode and the shared manual editor loads as its own lazy chunk when the manual tab is displayed.
 - Dialog focus trapping, Escape handling, scroll locking, and focus restoration share one lazy module instead of being duplicated across route chunks.
 - Completed countdowns unsubscribe from the shared one-second clock so expired offers do not keep background timer work alive.
 - The public category route is lazy-loaded as its own chunk.
@@ -545,7 +545,7 @@ Vercel headers:
 
 ## Validation status
 
-Verified on 2026-08-06 after adding the content-management Excel/manual product workflow:
+Verified on 2026-08-06 after refining the content-management Excel/manual product workflow:
 
 ```text
 npm run check: PASS
@@ -554,7 +554,7 @@ TypeScript:    PASS
 Vite build:    PASS
 ```
 
-The full `npm run build` pipeline (ESLint, both TypeScript projects, and Vite production build) passed on 2026-08-06 after the Excel-import implementation. The import panel is emitted as a separate 22.65 kB raw / 7.43 kB gzip chunk and the existing manual product editor remains separately lazy-loaded. The authenticated import mutation was not run against production because it can change catalog data. The prior audit fixed password digit mutation, stale cleared-search state, review reply carryover across pages, category storefront image omission, stale route descriptions, expired countdown subscriptions, modal keyboard/scroll lifecycle, repeated number-formatter construction, and malformed paginated-response crashes; it also moved the product editor behind a lazy boundary. A local headless Edge smoke run after the final build rendered `#/landing`, `#/category/water-pumps`, `#/ui-kit`, and the logged-out `#/admin` login route successfully. In the prior storefront QA, the public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
+The full `npm run check` pipeline (ESLint, both TypeScript projects, and Vite production build) passed on 2026-08-06 after the import-workflow refinements. The import panel is emitted as a separate 21.53 kB raw / 7.26 kB gzip chunk and the shared manual product editor remains separately lazy-loaded at 8.18 kB raw / 3.22 kB gzip. The entry bundle is 218.40 kB raw / 69.67 kB gzip and CSS is 78.14 kB raw / 14.33 kB gzip. The authenticated import mutation was not run against production because it can change catalog data. The prior audit fixed password digit mutation, stale cleared-search state, review reply carryover across pages, category storefront image omission, stale route descriptions, expired countdown subscriptions, modal keyboard/scroll lifecycle, repeated number-formatter construction, and malformed paginated-response crashes; it also moved the product editor behind a lazy boundary. A local headless Edge smoke run after the final build rendered `#/landing`, `#/category/water-pumps`, `#/ui-kit`, and the logged-out `#/admin` login route successfully. In the prior storefront QA, the public storefront endpoint was also verified through the local Vite proxy and the landing page rendered live newest-product data. Headless Edge visual QA passed for the landing page at exact 1440px and DevTools-emulated 390px viewports; the 390px document, body, and header each measured exactly 390px wide with no horizontal overflow. An authenticated browser smoke test with the supplied admin test account also passed for dashboard, moderation, and content/categories after adding paginated category-response compatibility. Authenticated mutations and live customer registration/login still require separate manual verification with appropriate accounts.
 
 Earlier live authentication/profile checks confirmed role `super-admin` plus the expected permission array and paginated brand/review responses. The latest supplied OpenAPI was verified directly for the new base-product fields, removal of variants/image associations, and customer cart item migration from `productVariantId` to `productId`; no authenticated live mutation was run for this update. Lower-clearance accounts were not supplied, so hidden-navigation visual smoke testing for each lower permission set remains manual; route and API gating are typechecked and production-built.
 
@@ -577,8 +577,8 @@ Before merging/deploying, manually verify in a browser:
 15. One account from each lower permission set: hidden navigation, direct-route denial, and dashboard partial-data behavior.
 16. Landing-page customer register/login/refresh/logout with a real customer account.
 17. Landing-page default product loading, immediate search clearing, mobile menu/layout, and local demo cart behavior.
-18. Content-management Excel rules modal, required acceptance, supplied ZIP download, `.xlsx` selection, main-category selection, and one authorized import against disposable test data.
-19. Manual mode opening the existing product editor and saving a test product.
+18. Content-management Excel rules opening only after the Excel tab is clicked, session-scoped acceptance persistence, direct supplied `.xlsx` download, semicolon-separated image URLs, required main-category selection, and one authorized import against disposable test data.
+19. Manual mode rendering the existing product editor inline and saving a test product.
 
 There is currently no automated test suite. Adding unit tests for phone normalization, query caching, and product payloads plus an authenticated E2E smoke suite is a high-value next step.
 
@@ -642,23 +642,22 @@ Each item is intentionally one line:
 - UI Kit is publicly reachable even though it is noindexed.
 - Frontend auth guards are not security boundaries; the backend must authorize every admin endpoint.
 - Product import uses the selected main category ID as `parentCategoryId`; the uploaded body field must remain named `file` and the browser must generate the multipart boundary.
-- The Excel template link is a static user-supplied ZIP; replace it only when an approved newer workbook is provided or the backend template endpoint is designated authoritative.
+- The Excel template link is a static user-supplied `.xlsx` workbook; replace it only when an approved newer workbook is provided or the backend template endpoint is designated authoritative.
 
 ## Current uncommitted change set
 
-At the time this handoff was updated, the Excel/manual product-import change set is:
+At the time this handoff was updated, the uncommitted refinement change set on top of `fb18943` is:
 
 ```text
 AGENTS.md
-public/downloads/fanino-product-import-template.zip (new; byte-identical copy of the supplied ZIP)
-src/App.tsx
-src/api/client.ts
-src/api/productImports.ts (new)
-src/pages/admin/AdminCategoriesPage.tsx
-src/pages/admin/AdminShell.tsx
-src/pages/admin/ProductImportPanel.tsx (new)
+public/downloads/fanino-product-import-template.zip (deleted; superseded by the supplied workbook)
+public/downloads/fanino-product-import-template.xlsx (new; byte-identical copy of the supplied workbook)
+src/components/ui/Dropdown.tsx
+src/pages/TestUIKit.tsx
+src/pages/admin/ProductEditorDialog.tsx
+src/pages/admin/ProductImportPanel.tsx
 ```
 
-The update adds a permission-aware «افزودن محصول» content tab with Excel/manual modes, a required rules dialog, the supplied template download, main-category selection, accessible `.xlsx` drag/drop selection, real multipart import submission/result counts, and reuse of the existing lazy manual product editor. It also updates the shared HTTP client so `FormData` requests preserve the browser-generated multipart boundary.
+The refinement adds the `;` image-URL separator to rule 2, serves the supplied workbook directly instead of a ZIP, prevents the rules dialog from opening when the view first mounts, persists acceptance for the browser-tab session, removes technical API copy from the import UI, renders the manual product form inline, and marks the Excel main-category selector with a red required star. The shared Dropdown required state is demonstrated in the UI Kit, and the moderation editor keeps its existing dialog presentation.
 
 Do not discard unrelated existing changes. After committing, update this section with the new commit hash and change the working-tree note near the top.
